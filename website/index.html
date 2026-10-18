@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MANTISPLANET — a dream you walk through</title>
+<style>
+  :root {
+    --bg: #07040f;
+    --panel: #120a22;
+    --sun: #ffb35a;
+    --dusk: #ff5f8f;
+    --sky: #8a6cff;
+    --text: #f3eaff;
+    --dim: #9b8ab8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background:
+      radial-gradient(ellipse at 50% -10%, #5a1f4a 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 110%, #102a40 0%, transparent 45%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    min-height: 100vh;
+  }
+  header { padding: 28px 20px 18px; border-bottom: 2px solid var(--dusk); text-align: center; }
+  h1 {
+    margin: 0; font-size: 2.2rem; letter-spacing: 0.2em;
+    background: linear-gradient(90deg, var(--sun), var(--dusk), var(--sky));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tag { color: var(--dim); margin-top: 8px; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  section {
+    background: var(--panel); border: 1px solid #2c1a48; border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 0 40px rgba(255, 95, 143, 0.08);
+  }
+  h2 { margin: 0 0 10px; color: var(--sun); font-size: 1.15rem; }
+  p, li { color: #dccfee; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .shots img { width: 100%; image-rendering: pixelated; border-radius: 6px; border: 1px solid #2c1a48; }
+  @media (max-width: 560px) { .shots { grid-template-columns: 1fr; } }
+  .btn {
+    display: inline-block; background: linear-gradient(135deg, #4a1a40, #2a1a60);
+    color: var(--text); border: 1px solid var(--sun); padding: 12px 20px; border-radius: 8px;
+    font-weight: 700; cursor: pointer; text-decoration: none; margin: 6px 8px 6px 0;
+  }
+  .btn:hover { border-color: var(--dusk); }
+  footer { text-align: center; color: var(--dim); font-size: 0.85rem; padding: 20px; }
+</style>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<header>
+  <h1>MANTISPLANET</h1>
+  <p class="tag">A dream you walk through, on an M5Stack Core2</p>
+</header>
+<main>
+
+<section>
+  <h2>What it is</h2>
+  <p>
+    Hold the Core2 like a window. Turn and the world wraps around you; tip it forward and you walk.
+    The world is dreamt up in front of you as you go: forests, lakes and meadows drift past, weather
+    rolls in and clears, light falls in shafts through the trees, and a rainbow, a murmuration, an
+    aurora or a deer might be waiting. Everything you hear is synthesized live, and the motor in your
+    hands is the bass. Nothing is saved and nothing behind you is kept. You can only go further in.
+  </p>
+  <div class="shots">
+    <img src="assets/shot-sunset.png" alt="Crepuscular rays over a lake at sunset">
+    <img src="assets/shot-forest.png" alt="Light shafts through a misty dawn forest">
+    <img src="assets/shot-rainbow.png" alt="A rainbow after the storm, mirrored in the lake">
+    <img src="assets/shot-night.png" alt="Aurora curtains over the water at night">
+  </div>
+</section>
+
+<section>
+  <h2>How to walk</h2>
+  <ul>
+    <li><strong>Hold it level</strong> — you stand still. Nothing ever walks for you.</li>
+    <li><strong>Tip forward</strong> — walk; further is faster. Level it again to stop.</li>
+    <li><strong>Turn</strong> — look around. The screen is a little window: the world stays put while the frame sweeps past it, and near trees slide across far ones.</li>
+    <li><strong>Long press the screen</strong> — sound off or on. The motor keeps playing the world in your hands either way.</li>
+    <li><strong>Trees, boulders, cliffs and lakes are solid.</strong> Walk into one and you feel the bump and stop; look around and find another way. Clip the edge of one and you slide past.</li>
+    <li><strong>Walk steadily</strong> and music drifts in, a passage at a time. <strong>Stand still</strong> and it dissolves into the forest; the crickets come back and the animals come closer.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Install on Core2</h2>
+  <p>Chrome or Edge · USB data cable · board powered on.</p>
+  <esp-web-install-button manifest="firmware/manifest.json">
+    <button slot="activate" class="btn">Install MANTISPLANET</button>
+    <span slot="unsupported">Use Chrome or Edge for USB install.</span>
+  </esp-web-install-button>
+  <p style="margin-top:12px">
+    <a class="btn" href="firmware/firmware-merged.bin" download>Download .bin</a>
+  </p>
+</section>
+
+</main>
+<footer>MANTISPLANET · M5Stack Core2</footer>
+</body>
+</html>
