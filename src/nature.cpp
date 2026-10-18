@@ -235,31 +235,33 @@ static void thunderBlock(Bus& b, int n) {
 // ================= wind, leaves =================
 static dsp::Pink s_pink;
 static dsp::SVF s_windBP, s_windLow, s_whistle;
-static float s_windG = 0.f, s_leafEnv = 0.f, s_leafLP = 0.f, s_leaf2 = 0.f, s_leaf2LP = 0.f;
+static float s_windG = 0.f;
+// leaves: a soft shimmer that breathes with the wind (no grains, no clicks)
+static dsp::SVF s_leafHi, s_leafLo;
+static float s_flut = 0.f, s_flutT = 0.f, s_leafG = 0.f;
+static int s_flutN = 0;
 static void windBlock(Bus& b, int n, const Scene& s) {
     float gust = s.gust;
     s_windBP.set(230.f + 950.f * gust + 300.f * s.storm, 0.75f);
     s_windLow.set(160.f + 120.f * gust, 0.6f);
     s_whistle.set(950.f + 800.f * gust, 9.f);
     float target = (0.04f + 0.42f * gust) * (0.55f + 0.45f * s.open);
-    float leafRate = (25.f + 420.f * gust) * (0.15f + s.forestNear) / dsp::SR;
-    float leafLvl = (0.05f + 0.28f * gust) * (0.25f + 0.9f * s.forestNear);
-    const float lk = dsp::coef(2500.f);
+    // Leaves: thousands of tiny contacts blur into a soft "shhh". Two noise bands (a shimmer and a
+    // leafy body) under a flutter that glides between random levels every few ms, so it moves
+    // like foliage without a single sharp onset. Gusts swell it; under trees it's much stronger.
+    s_leafHi.set(2600.f + 1500.f * gust, 0.8f);
+    s_leafLo.set(1100.f + 300.f * gust, 0.9f);
+    float leafTarget = (0.015f + 0.2f * gust * gust) * (0.12f + 0.88f * s.forestNear);
     for (int i = 0; i < n; i++) {
         s_windG += (target - s_windG) * 0.0005f;
+        s_leafG += (leafTarget - s_leafG) * 0.0002f;      // foliage answers a gust a beat late
         float w = rng.bi();
         float p = s_pink.tick(w);
         float v = (s_windBP.bp(p) * 1.5f + s_windLow.lp(p) * 0.35f) * s_windG;
         v += s_whistle.bp(w) * s.storm * gust * 0.05f;
-        // leaves: a crackle of short high grains
-        if (rng.uni() < leafRate) s_leafEnv = fmaxf(s_leafEnv, 0.3f + rng.uni() * 0.7f);
-        if (rng.uni() < leafRate * 0.4f) s_leaf2 = fmaxf(s_leaf2, 0.3f + rng.uni() * 0.7f);
-        s_leafEnv *= 0.9965f;
-        s_leaf2 *= 0.9988f;
-        s_leafLP += lk * (w - s_leafLP);
-        float hp = w - s_leafLP;
-        s_leaf2LP += 0.35f * (hp - s_leaf2LP);
-        v += (hp * s_leafEnv * 0.55f + s_leaf2LP * s_leaf2 * 0.4f) * leafLvl;
+        if (--s_flutN <= 0) { s_flutN = 100 + (int)(rng.next() % 140u); s_flutT = rng.uni(); }
+        s_flut += (s_flutT - s_flut) * 0.006f;              // ~7 ms glide: flutter, never a click
+        v += (s_leafHi.bp(w) * 0.8f + s_leafLo.bp(rng.bi()) * 0.5f) * (0.6f + 0.4f * s_flut) * s_leafG;
         b.dry[i] += v;
         b.rev[i] += v * 0.3f;
     }

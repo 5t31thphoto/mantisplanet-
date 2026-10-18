@@ -1,6 +1,7 @@
 #pragma once
 // Small, cheap, stable DSP building blocks for a 24 kHz mono engine on an ESP32 FPU.
 #include <stdint.h>
+#include <stddef.h>
 #include <math.h>
 
 namespace dsp {
@@ -11,6 +12,8 @@ constexpr float TWO_PI_F = 6.28318531f;
 
 extern float SINE[1025];
 void init();
+// Runtime buffer: internal RAM if there's room, else PSRAM; zeroed. Keeps big buffers out of .bss.
+void* allocFast(size_t bytes);
 
 inline float clampf(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
 

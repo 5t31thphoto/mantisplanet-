@@ -14,6 +14,8 @@
 #ifdef HOST
 #include <stdio.h>
 #include <stdlib.h>
+#else
+#include <esp_heap_caps.h>
 #endif
 
 namespace mantis {
@@ -44,6 +46,17 @@ static uint8_t  fb[W * H];
 static uint16_t pal565[256];
 static uint8_t  palRGB[256 * 3];
 static uint8_t  HW[17][17];
+
+// Big scratch buffers live on the heap (internal RAM first, PSRAM if needed) to keep .bss small.
+static void* allocScratch(size_t bytes) {
+#ifdef HOST
+    void* p = calloc(1, bytes);
+#else
+    void* p = heap_caps_calloc(1, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!p) p = heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#endif
+    return p;
+}
 static int      s_bob = 0;
 
 static const uint8_t BAYER[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
@@ -497,15 +510,18 @@ static void drawClouds() {
     const float thresh = 0.92f - 0.62f * cov + 0.12f * S.night * (1.f - sc.cloud) + 0.25f * sc.aurora * S.night;
     const float drift = g_t * 0.006f * (1.f + 2.f * sc.wind);
     const float centre = CR * (0.42f + 0.2f * sc.storm);
-    static float dens[CW][CR + 2];
+    static float* dens = nullptr;                                  // CW x (CR + 2), on the heap
     static float prox[CW];
+    if (!dens) dens = (float*)allocScratch(sizeof(float) * CW * (CR + 2));
+    if (!dens) return;
+    auto DN = [&](int cx, int cyp1) -> float& { return dens[cx * (CR + 2) + cyp1]; };
     for (int cx = 0; cx < CW; cx++) {
         float a = g_yaw + (cx * 2 - W * 0.5f) / PXR + drift;
         float u = angU(a, 36);
         for (int cy = -1; cy <= CR; cy++) {
             float n = fbmP(u, cy * 0.15f + g_dist * 0.004f + g_t * 0.01f, 36, 4, 0xC1u);
             float prof = clampf(1.f - fabsf(cy - centre) / (CR * 0.6f), 0.f, 1.f);
-            dens[cx][cy + 1] = n * 0.8f + prof * 0.35f - thresh;
+            DN(cx, cy + 1) = n * 0.8f + prof * 0.35f - thresh;
         }
         float rel = wrapPi(SUN_AZ - a);
         prox[cx] = sunVis / (1.f + rel * rel * 6.f);
@@ -515,8 +531,8 @@ static void drawClouds() {
         int ix = (int)fx, iy = (int)floorf(fy);
         int ix1 = ix + 1 < CW ? ix + 1 : ix;
         float tx = fx - ix, ty = fy - iy;
-        float a0 = dens[ix][iy + 1] + (dens[ix1][iy + 1] - dens[ix][iy + 1]) * tx;
-        float a1 = dens[ix][iy + 2] + (dens[ix1][iy + 2] - dens[ix][iy + 2]) * tx;
+        float a0 = DN(ix, iy + 1) + (DN(ix1, iy + 1) - DN(ix, iy + 1)) * tx;
+        float a1 = DN(ix, iy + 2) + (DN(ix1, iy + 2) - DN(ix, iy + 2)) * tx;
         return a0 + (a1 - a0) * ty;
     };
     for (int y = 0; y < CR * 2; y++) {
@@ -766,7 +782,7 @@ static void cleanOrphans() {
 // solid things, hazes) by that much. Fog makes the air scatter more.
 static constexpr int RAY_NB = 192, RAY_NR = 128;
 static constexpr float RAY_STEP = 3.f;
-static uint8_t s_rayT[RAY_NB][RAY_NR];
+static uint8_t* s_rayT = nullptr;      // RAY_NB x RAY_NR, allocated in renderInit
 
 static void drawCrepuscular() {
     const Scene& sc = g_scene;
@@ -776,7 +792,7 @@ static void drawCrepuscular() {
     float lowK = clampf(1.f - S.elev / 0.5f, 0.f, 1.f);
     float str = sunUp * (0.35f + 0.65f * lowK) * (1.f - sc.rain * 0.85f) * (1.f - 0.8f * clampf((sc.cloud - 0.75f) * 4.f, 0.f, 1.f))
                 * (1.f + sc.fog * 1.3f) * clampf(1.45f - fabsf(rel), 0.f, 1.f) * (1.f - sc.intro);
-    if (str < 0.04f) return;
+    if (str < 0.04f || !s_rayT) return;
 #ifdef HOST
     if (getenv("NORAYS")) return;
     if (getenv("RAYDBG")) fprintf(stderr, "rays: str %.2f sun (%.0f,%.0f) elev %.2f\n", str, sunX, sunY, S.elev);
@@ -795,7 +811,7 @@ static void drawCrepuscular() {
             int ix = (int)x, iy = (int)y;
             if ((unsigned)ix < (unsigned)W && (unsigned)iy < (unsigned)H) T *= 1.f - s_occ[fb[iy * W + ix]];
             T += (1.f - T) * 0.006f;
-            s_rayT[bi][k] = (uint8_t)(T * pat * 255.f);
+            s_rayT[bi * RAY_NR + k] = (uint8_t)(T * pat * 255.f);
         }
     }
     const uint32_t drift = (uint32_t)(g_t * 5.f), drift2 = (uint32_t)(g_t * 2.f);
@@ -814,8 +830,10 @@ static void drawCrepuscular() {
             float fbb = bf - b0, fk = kf - k0;
             if (b0 >= RAY_NB) b0 -= RAY_NB;
             int b1 = b0 + 1 >= RAY_NB ? 0 : b0 + 1;
-            float t0 = s_rayT[b0][k0] + (s_rayT[b0][k0 + 1] - s_rayT[b0][k0]) * fk;
-            float t1 = s_rayT[b1][k0] + (s_rayT[b1][k0 + 1] - s_rayT[b1][k0]) * fk;
+            const uint8_t* r0 = s_rayT + b0 * RAY_NR + k0;
+            const uint8_t* r1 = s_rayT + b1 * RAY_NR + k0;
+            float t0 = r0[0] + (r0[1] - r0[0]) * fk;
+            float t1 = r1[0] + (r1[1] - r1[0]) * fk;
             float T = (t0 + (t1 - t0) * fbb) * (1.f / 255.f);
             float B = T * str * (1.f - r / (RAY_NR * RAY_STEP));
             uint8_t& p = fb[y * W + x];
@@ -1577,6 +1595,7 @@ static void drawObjects() {
 
 // ---------------- entry ----------------
 void renderInit() {
+    if (!s_rayT) s_rayT = (uint8_t*)allocScratch(RAY_NB * RAY_NR);
     for (int r = 0; r <= 16; r++)
         for (int dy = 0; dy <= r; dy++) {
             float v = (r + 0.3f) * (r + 0.3f) - dy * dy;

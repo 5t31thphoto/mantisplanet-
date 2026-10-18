@@ -64,7 +64,7 @@ static dsp::Saw s_bassO;
 static dsp::SVF s_bassF;
 static float s_bassEnv = 0.f, s_bassCut = 300.f;
 
-struct KS { float buf[512]; int len, pos; float damp, amp; bool on; };
+struct KS { float* buf; int len, pos; float damp, amp; bool on; };
 static KS s_ks[3];
 static int s_ksI = 0, s_pentaI = 3;
 
@@ -95,6 +95,7 @@ static void bell(float hz, float amp) {
 
 static void pluck(float hz, float amp, float bright) {
     KS& k = s_ks[s_ksI = (s_ksI + 1) % 3];
+    if (!k.buf) return;
     k.len = (int)clampf(dsp::SR / hz, 8.f, 511.f);
     k.pos = 0;
     float lp = 0.f;
@@ -262,7 +263,7 @@ void musicInit() {
         s_pad[v].a.ph = rng.next();
         s_pad[v].b.ph = rng.next();
     }
-    for (KS& k : s_ks) { k.on = false; k.len = 100; k.pos = 0; }
+    for (KS& k : s_ks) { k.on = false; k.len = 100; k.pos = 0; if (!k.buf) k.buf = (float*)dsp::allocFast(512 * sizeof(float)); }
     for (Bell& b : s_bell) b.on = false;
     s_next16 = (int64_t)SAMPLES_PER_16;
 }
