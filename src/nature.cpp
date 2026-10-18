@@ -145,8 +145,15 @@ void natureFootstep(uint8_t surf, float st) {
 void natureBump(uint8_t kind) {
     ping(0.f, 145.f, 0.6f, 0.1f, 0.08f, 0.38f, 0.2f);
     grain(0.f, 0, 380.f, 300.f, 0.9f, 0.002f, 0.05f, 0.2f);
-    if (kind == BUMP_TREE) {
-        for (int i = 0; i < 10; i++) grain(0.03f + rng.uni() * 0.3f, 0, 2800.f + rng.uni() * 3000.f, 2500.f, 1.5f, 0.002f, 0.012f, 0.06f + rng.uni() * 0.06f, 0.3f);
+    if (kind == BUMP_TREE) {                               // a branch shaken: a brush, then the leaves settle
+        grain(0.01f, 0, 3000.f, 2200.f, 0.8f, 0.025f, 0.09f, 0.11f, 0.3f);
+        grain(0.08f, 0, 1800.f, 1400.f, 0.7f, 0.06f, 0.22f, 0.07f, 0.35f);
+        int k = 2 + (int)(rng.uni() * 2.f);
+        float t = 0.12f;
+        for (int i = 0; i < k; i++) {                      // a couple of soft flutters, never evenly spaced
+            t += 0.07f + rng.uni() * 0.12f;
+            grain(t, 0, 2200.f + rng.uni() * 900.f, 1800.f, 0.9f, 0.015f, 0.045f, 0.035f + rng.uni() * 0.02f, 0.35f);
+        }
     } else if (kind == BUMP_ROCK) {
         grain(0.f, 0, 4200.f, 4200.f, 1.2f, 0.f, 0.002f, 0.25f);
         ping(0.f, 1400.f, 1.f, 0.02f, 0.03f, 0.08f);

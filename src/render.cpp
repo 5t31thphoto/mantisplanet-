@@ -60,9 +60,13 @@ static void* allocScratch(size_t bytes) {
 static int      s_bob = 0;
 
 static const uint8_t BAYER[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
-static inline float dith(int x, int y) { return (BAYER[((y & 3) << 2) | (x & 3)] + 0.5f) * (1.f / 16.f); }
+// The view scrolls in whole pixels (g_pan = yaw on the pixel grid). Every dither and noise pattern is
+// keyed to world columns (x + g_pan), so patterns travel with the scenery instead of crawling over it.
+static int g_pan = 0;
+static inline float dith(int x, int y) { return (BAYER[((y & 3) << 2) | ((x + g_pan) & 3)] + 0.5f) * (1.f / 16.f); }
 static inline float ign(int x, int y) {     // interleaved gradient noise: organic, no lattice
-    float f = 0.06711056f * x + 0.00583715f * y;
+    x += g_pan;
+    float f = 0.06711056f * (x & 4095) + 0.00583715f * y;
     f = 52.9829189f * (f - floorf(f));
     return f - floorf(f);
 }
@@ -71,7 +75,7 @@ static inline int band(float f, int x, int y) {
     int i = (int)f;
     float fr = f - i;
     if (fr > 0.86f) return i + 1;
-    if (fr > 0.62f && ((x ^ y) & 1)) return i + 1;
+    if (fr > 0.62f && (((x + g_pan) ^ y) & 1)) return i + 1;
     return i;
 }
 static inline float clampf(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
@@ -390,7 +394,7 @@ static void computeColumns() {
         }
     }
     for (int y = HOR; y < H; y++)
-        xoffRow[y] = (int)lroundf(sinf(y * 0.9f + g_t * 1.7f + g_dist * 0.3f) * (0.3f + (y - HOR) * 0.045f));
+        xoffRow[y] = (int)lroundf(sinf(y * 0.9f + g_t * 0.8f + g_dist * 0.3f) * (0.2f + (y - HOR) * 0.03f));
 }
 
 // ---------------- sky ----------------
@@ -508,7 +512,7 @@ static void drawClouds() {
     const Scene& sc = g_scene;
     const float cov = sc.cloud;
     const float thresh = 0.92f - 0.62f * cov + 0.12f * S.night * (1.f - sc.cloud) + 0.25f * sc.aurora * S.night;
-    const float drift = g_t * 0.006f * (1.f + 2.f * sc.wind);
+    const float drift = floorf(g_t * 0.006f * (1.f + 2.f * sc.wind) * PXR) / PXR;   // whole-pixel cloud scroll
     const float centre = CR * (0.42f + 0.2f * sc.storm);
     static float* dens = nullptr;                                  // CW x (CR + 2), on the heap
     static float prox[CW];
@@ -519,7 +523,7 @@ static void drawClouds() {
         float a = g_yaw + (cx * 2 - W * 0.5f) / PXR + drift;
         float u = angU(a, 36);
         for (int cy = -1; cy <= CR; cy++) {
-            float n = fbmP(u, cy * 0.15f + g_dist * 0.004f + g_t * 0.01f, 36, 4, 0xC1u);
+            float n = fbmP(u, cy * 0.15f + g_dist * 0.004f + g_t * 0.004f, 36, 4, 0xC1u);
             float prof = clampf(1.f - fabsf(cy - centre) / (CR * 0.6f), 0.f, 1.f);
             DN(cx, cy + 1) = n * 0.8f + prof * 0.35f - thresh;
         }
@@ -542,7 +546,7 @@ static void drawClouds() {
             float d = D(fx, fy);
             if (d <= 0.f) continue;
             float alpha = clampf(d * 11.f, 0.f, 1.f);
-            if (alpha < 0.45f || (alpha < 0.7f && ((x ^ y) & 1))) continue;        // crisp 1 px edge, thin seam
+            if (alpha < 0.45f || (alpha < 0.7f && (((x + g_pan) ^ y) & 1))) continue;   // crisp 1 px edge, thin seam
             float dn = D(fx, fy + 1.f), up = D(fx, fy - 1.f);
             float bottom = clampf((d - dn) * 6.f, 0.f, 1.f), top = clampf((d - up) * 6.f, 0.f, 1.f);
             float light = 0.28f + bottom * 0.62f * lowSun + top * 0.45f * (1.f - lowSun) + prox[x >> 1] * 0.3f + (1.f - alpha) * 0.18f;
@@ -563,18 +567,18 @@ static void drawRidge(const float* hh, int baseY, uint8_t ramp, float snowLine, 
         float slope = (hh[x + 2] - hh[x]) * 0.5f;
         float face = -slope * sideCol[x];                       // + faces the sun
         float lit = 0.5f + 0.3f * face / (1.f + fabsf(face));    // soft, never a hard column split
-        float u = angU(colAng[x], 640);
+        float u = angU(colAng[x], 240);
         int y0 = clampi((int)ceilf(top), 0, H);
         float snowDepth = h > snowLine ? (h - snowLine) * 0.55f : -1.f;
         for (int y = y0; y < baseY && y < H; y++) {
             float d = y - top, depth = d / h;
             // erosion gullies: diagonal streaks anchored to the panorama, lit on the sun side
-            float g = vnoiseP(u + d * 0.55f * (sideCol[x] >= 0.f ? 1.f : -1.f), d * 0.22f, 640, salt);
+            float g = vnoiseP(u + d * 0.2f * (sideCol[x] >= 0.f ? 1.f : -1.f), d * 0.12f, 240, salt);
             // spur: shade from a column displaced by depth so the lit/shadow split runs down diagonally
             int xs = clampi(x + (int)((g - 0.5f) * d * 1.4f), 0, W - 1);
             float fs = -(hh[xs + 2] - hh[xs]) * 0.5f * sideCol[x];
             float ls = 0.5f + 0.3f * fs / (1.f + fabsf(fs));
-            float s = (lit + ls) * 0.5f + (g - 0.5f) * 0.55f * (0.4f + 0.6f * (1.f - depth)) - depth * 0.3f;
+            float s = (lit + ls) * 0.5f + (g - 0.5f) * 0.38f * (0.4f + 0.6f * (1.f - depth)) - depth * 0.3f;
             if (snowDepth > 0.f && d < snowDepth + g * 3.f) s += 0.3f + 0.15f * (lit - 0.3f);
             int lv = clampi((int)(s * 7.99f), 0, 7) * 2 + 1;                    // eight clean facet tones
             if (d < 1.f && fs > 0.15f) lv = clampi(lv + 4, 0, 15);              // the ridgeline catches the light
@@ -592,7 +596,7 @@ static void drawHills(const float* hh, int baseY, int half) {
         int y0 = clampi((int)ceilf(top), 0, H);
         for (int y = y0; y < baseY && y < H; y++) {
             float d = y - top;
-            uint32_t hs = hash32((uint32_t)(x * 2654435761u) ^ (uint32_t)(y * 40503) ^ (uint32_t)half);
+            uint32_t hs = hash32((uint32_t)((x + g_pan) * 2654435761u) ^ (uint32_t)(y * 40503) ^ (uint32_t)half);
             float s = 2.4f + face * 2.2f - d * 0.18f + ((int)(hs & 3) - 1.5f) * 0.35f;
             if (d < 1.2f && face > 0.35f) s += 1.2f * lowSun + 0.5f;
             fb[y * W + x] = R_HILLS + half + clampi((int)(s + dith(x, y)), 0, 7);
@@ -610,7 +614,7 @@ static inline uint8_t fogStep(uint8_t p) {
     if (p >= R_HILLS && p < R_HILLS + 8) return p + 8;                                   // near hills -> far hills
     if (p >= R_HILLS + 8 && p < R_GROUND) return R_MTN_NEAR + 1 + (p & 7);                // far hills -> mountain haze
     if (p >= R_MTN_NEAR && p < R_HILLS) return R_MTN_FAR + (p & 15);                     // near range -> far range
-    if (p >= R_MTN_FAR && p < R_MTN_NEAR) return R_SKY + 7 + ((p & 15) >> 3);            // far range -> sky
+    if (p >= R_MTN_FAR && p < R_MTN_NEAR) return (p & 15) < 14 ? p + 2 : p;               // far range: a softer, lighter rock tone
     if (p >= R_GROUND && p < R_LEAF) { int b = (p - R_GROUND) >> 2; return b < 3 ? p + 4 : p; }
     if (p >= R_LEAF && p < R_LEAF + 8) return p + 8;
     if (p >= R_LEAF + 8 && p < R_BARK) return R_HILLS + 8 + (p & 7);                    // far leaves -> hazy hills
@@ -629,7 +633,7 @@ static void drawMist(int y0, int y1) {
         for (int x = 0; x < W; x++) {
             float amt = fy * (0.3f + 0.9f * mistN[x]);
             uint8_t& p = fb[y * W + x];
-            float r = ign(x + (int)(g_t * 7.f), y);
+            float r = ign(x, y);
             if (r < amt) p = fogStep(p);
             if (r < amt - 0.6f) p = fogStep(p);
         }
@@ -640,8 +644,8 @@ static void drawMist(int y0, int y1) {
 static void drawGround() {
     const uint32_t seed = worldSeed();
     const float daylight = sunVis * clampf((S.elev + 0.05f) / 0.12f, 0.f, 1.f) * (1.f - S.night);
-    const uint32_t tglit = (uint32_t)(g_t * 6.f);
-    const int tstreak = (int)(g_t * 2.f);
+    const uint32_t tglit = (uint32_t)(g_t * 2.f);
+    const int tstreak = (int)(g_t * 0.6f);
     for (int by = HOR; by < H; by += 2)
         for (int bx = 0; bx < W; bx += 2) {
             float zc = ZK / (by - HOR + 1.f);
@@ -675,7 +679,7 @@ static void drawGround() {
                         float gl = sunVis * (1.f - g_scene.rain) * (0.35f + 0.65f * lowSun);
                         float cf = 1.f - fabsf(px - sunX) / wcol;
                         if (gl > 0.05f && cf > 0.f && !s_rainbowSwap && ((py + tstreak) % 3) != 0) {
-                            uint32_t g = hash32((uint32_t)((px + py * 5) >> 2) * 131u ^ (uint32_t)py * 977u ^ tglit);
+                            uint32_t g = hash32((uint32_t)((px + g_pan + py * 5) >> 2) * 131u ^ (uint32_t)py * 977u ^ tglit);
                             if ((g & 255u) < (uint32_t)(gl * 200.f * cf * cf)) idx = R_SUN + 9 + (uint8_t)(cf * 5.f + ((g >> 9) & 1u));
                         }
                     } else {
@@ -761,18 +765,27 @@ static void castShadows() {
 
 // A pixel that differs from all four neighbours, which agree, is noise not detail: fold it in.
 // Terrain, ground and plants only; stars, glints, rain, motes and fireflies are deliberate.
-static void cleanOrphans() {
-    for (int y = 1; y < H - 1; y++) {
-        uint8_t* row = fb + y * W;
-        for (int x = 1; x < W - 1; x++) {
-            uint8_t p = row[x];
-            if (p < R_MTN_FAR || p >= R_ACCENT) continue;
-            uint8_t l = row[x - 1];
-            if (l == p || l != row[x + 1] || l != row[x - W] || l != row[x + W]) continue;
-            if (l < R_MTN_FAR || l >= R_ACCENT) continue;
-            row[x] = l;
-        }
+static inline void cleanRow(int y) {
+    uint8_t* row = fb + y * W;
+    for (int x = 1; x < W - 1; x++) {
+        uint8_t p = row[x];
+        if (p < R_MTN_FAR || p >= R_ACCENT) continue;
+        uint8_t l = row[x - 1];
+        if (l == p || l != row[x + 1] || l != row[x - W] || l != row[x + W]) continue;
+        if (l < R_MTN_FAR || l >= R_ACCENT) continue;
+        row[x] = l;
     }
+}
+static inline void veilRow(int y);
+// One pass over the frame: clean row y, then veil row y-1 (which nothing reads any more), so the
+// result is identical to two separate passes.
+static void cleanAndVeil() {
+    bool veil = g_scene.fog >= 0.03f;
+    for (int y = 0; y < H; y++) {
+        if (y >= 1 && y < H - 1) cleanRow(y);
+        if (veil && y >= 1) veilRow(y - 1);
+    }
+    if (veil) veilRow(H - 1);
 }
 
 // ---------------- crepuscular rays: screen-space light scattering ----------------
@@ -814,7 +827,7 @@ static void drawCrepuscular() {
             s_rayT[bi * RAY_NR + k] = (uint8_t)(T * pat * 255.f);
         }
     }
-    const uint32_t drift = (uint32_t)(g_t * 5.f), drift2 = (uint32_t)(g_t * 2.f);
+    const uint32_t drift = (uint32_t)(g_t * 1.2f), drift2 = (uint32_t)(g_t * 0.5f);
     for (int y = 0; y < H; y++) {
         float dy = y - sunY;
         for (int x = 0; x < W; x++) {
@@ -838,7 +851,7 @@ static void drawCrepuscular() {
             float B = T * str * (1.f - r / (RAY_NR * RAY_STEP));
             uint8_t& p = fb[y * W + x];
             // dust motes drifting in the light
-            if (B > 0.32f && !s_rainbowSwap && y > HOR - 24 && (hash32((uint32_t)(x + drift) * 0x9E3779B1u ^ (uint32_t)(y - drift2) * 0x85EBCA77u) & 1023u) < (uint32_t)(B * 7.f)) {
+            if (B > 0.32f && !s_rainbowSwap && y > HOR - 24 && (hash32((uint32_t)(x + g_pan + drift) * 0x9E3779B1u ^ (uint32_t)(y - drift2) * 0x85EBCA77u) & 1023u) < (uint32_t)(B * 3.f)) {
                 p = R_SUN + 13;
                 continue;
             }
@@ -862,17 +875,16 @@ static void drawCrepuscular() {
 }
 
 // ---------------- weather & sky moments ----------------
-static void fogVeil() {
-    if (g_scene.fog < 0.03f) return;
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < W; x++) {
-            uint8_t& p = fb[y * W + x];
-            float a = s_fogAmt[p];
-            if (a <= 0.f) continue;
-            float r = ign(x, y);
-            if (r < a) p = fogStep(p);
-            if (r < a - 0.5f) p = fogStep(p);
-        }
+static inline void veilRow(int y) {
+    uint8_t* row = fb + y * W;
+    for (int x = 0; x < W; x++) {
+        uint8_t& p = row[x];
+        float a = s_fogAmt[p];
+        if (a <= 0.f) continue;
+        float r = ign(x, y);
+        if (r < a) p = fogStep(p);
+        if (r < a - 0.5f) p = fogStep(p);
+    }
 }
 
 static void drawRain() {
@@ -1566,7 +1578,8 @@ static void drawObjects() {
         if (fabsf(rel) - halfAng > FOV * 0.5f + 0.02f) continue;
         if (!o.solid && rng < 0.9f) continue;
 
-        float sx = W * 0.5f + rel * PXR, by = HOR + ZK / rng, s = PXR / rng;
+        float sx = floorf(W * 0.5f + rel * PXR + 0.5f), by = floorf(HOR + ZK / rng + 0.5f), s = PXR / rng;
+        if (s < 40.f) s = exp2f(floorf(log2f(s) * 12.f + 0.5f) / 12.f);    // mid/far: size in 6% steps
         float sunRel = wrapPi(SUN_AZ - app);
         Lighting Lg;
         Lg.side = sinf(sunRel);
@@ -1608,7 +1621,9 @@ float sunElevation(float tod) { return sampleKey(tod).elev; }
 
 void renderFrame(float yaw, float distance, float speed, float timeSec) {
     const Scene& sc = g_scene;
-    g_yaw = yaw; g_dist = distance; g_t = timeSec;
+    g_pan = (int)lroundf(yaw * PXR);
+    g_yaw = g_pan / PXR;                                            // the view scrolls in whole pixels
+    g_dist = distance; g_t = timeSec;
     g_camX = CAM_L * cosf(yaw); g_camY = CAM_L * sinf(yaw);
     S = sampleKey(g_scene.tod);
     weatherKey(sc);
@@ -1640,8 +1655,7 @@ void renderFrame(float yaw, float distance, float speed, float timeSec) {
     castShadows();
     drawMist(HOR, HOR + 10 + (int)(sc.fog * 14.f));
     drawObjects();
-    cleanOrphans();
-    fogVeil();
+    cleanAndVeil();
     drawCrepuscular();
     drawFireflies();
     drawBolt();

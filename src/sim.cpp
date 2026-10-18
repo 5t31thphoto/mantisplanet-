@@ -19,7 +19,9 @@ static inline V3 norm(V3 a) { float l = len(a); return l > 1e-6f ? sc(a, 1.f / l
 // Flip if turning the unit pans the panorama the wrong way.
 static constexpr float YAW_SIGN = 1.0f;
 static constexpr float DEG2RAD = 0.01745329252f;
-static constexpr float PREDICT_S = 0.035f;          // render + LCD latency the view leads by
+// The view leads by the real latency: about one frame of render plus the LCD push. Measured from the
+// loop's own frame time, smoothed and clamped so one slow frame can't make the view jump.
+static float s_dtAvg = 0.033f;
 
 static V3 s_up = {0, 0, 1};          // gravity direction in the device frame (accelerometer sense)
 static V3 s_bias = {0, 0, 0};        // gyro bias, deg/s
@@ -125,7 +127,9 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
         if (!s_trying && forwardSpeed < 0.03f) forwardSpeed = 0.f;
     }
 
-    outYaw = s_yaw + s_rateSm * DEG2RAD * PREDICT_S;               // lead the latency
+    s_dtAvg += (fminf(dt, 0.1f) - s_dtAvg) * 0.05f;
+    float predict = fminf(0.1f, fmaxf(0.03f, s_dtAvg + 0.015f));
+    outYaw = s_yaw + s_rateSm * DEG2RAD * predict;                 // lead the latency
     outSpeed = forwardSpeed;
     trying = s_trying;
 }
