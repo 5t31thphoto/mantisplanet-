@@ -17,7 +17,7 @@ static inline float len(V3 a) { return sqrtf(dot(a, a)); }
 static inline V3 norm(V3 a) { float l = len(a); return l > 1e-6f ? sc(a, 1.f / l) : v3(0, 0, 1); }
 
 // Flip if turning the unit pans the panorama the wrong way.
-static constexpr float YAW_SIGN = 1.0f;
+static constexpr float YAW_SIGN = -1.0f;
 static constexpr float DEG2RAD = 0.01745329252f;
 // The view leads by the real latency: about one frame of render plus the LCD push. Measured from the
 // loop's own frame time, smoothed and clamped so one slow frame can't make the view jump.
@@ -27,7 +27,8 @@ static V3 s_up = {0, 0, 1};          // gravity direction in the device frame (a
 static V3 s_bias = {0, 0, 0};        // gyro bias, deg/s
 static V3 s_aLP = {0, 0, 1};         // smoothed accelerometer for the throttle
 static bool s_init = false;
-static float s_neutralY = 0.f;
+static float s_neutralPitch = 0.f;
+static uint32_t s_lastImuUs = 0;
 static float s_yaw = 0.f, s_rate = 0.f, s_rateSm = 0.f;
 static float s_stillT = 0.f, s_learnT = 0.f;
 static float s_mean = 0.f, s_act = 0.f, s_handT = 0.f;   // hand-held bias tracking
@@ -64,6 +65,7 @@ void initControls() {
     s_stillT = s_learnT = 0.f;
     s_mean = s_act = s_handT = 0.f;
     s_jit = 1.f;
+    s_lastImuUs = 0;
     s_bias = v3(0.f, 0.f, 0.f);
     loadBias();                                                    // on the device: last session's learned bias
 }
@@ -73,11 +75,17 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
 
     if (M5.Imu.update()) {
         auto d = M5.Imu.getImuData();
+        // integrate over the real time since the last sample (the IMU doesn't deliver every loop)
+        uint32_t nowUs = micros();
+        float idt = s_lastImuUs ? (nowUs - s_lastImuUs) * 1e-6f : dt;
+        s_lastImuUs = nowUs;
+        if (idt > 0.1f) idt = 0.1f;
+        dt = idt;
         V3 a = v3(d.accel.x, d.accel.y, d.accel.z);            // g
         V3 w = v3(d.gyro.x, d.gyro.y, d.gyro.z);               // deg/s
         float an = len(a);
         V3 an1 = an > 0.2f ? sc(a, 1.f / an) : s_up;
-        if (!s_init) { s_up = an1; s_aLP = an1; s_neutralY = an1.y; s_init = true; }
+        if (!s_init) { s_up = an1; s_aLP = an1; s_neutralPitch = atan2f(an1.z, an1.y); s_init = true; }
         V3 wc = sub(w, s_bias);
 
         // Gravity in the device frame: carried along by the gyro (instant), pulled gently toward the
@@ -119,8 +127,13 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
 
         // Throttle: tip forward relative to how you held it at the start.
         s_aLP = norm(v3(s_aLP.x + (an1.x - s_aLP.x) * 0.35f, s_aLP.y + (an1.y - s_aLP.y) * 0.35f, s_aLP.z + (an1.z - s_aLP.z) * 0.35f));
-        float pitchTip = s_aLP.y - s_neutralY;
-        float targetSpeed = pitchTip > 0.06f ? (pitchTip - 0.06f) * 2.6f : 0.f;
+        // Throttle: the tip angle in the forward/back plane, relative to how you held it at the start.
+        // Either way past ~5 deg walks (further = faster); level stops. Roll doesn't count.
+        float pa = atan2f(s_aLP.z, s_aLP.y) - s_neutralPitch;
+        while (pa > 3.14159265f) pa -= 6.2831853f;
+        while (pa < -3.14159265f) pa += 6.2831853f;
+        float tipDeg = fabsf(pa) * 57.29578f;
+        float targetSpeed = tipDeg > 5.f ? (tipDeg - 5.f) / 25.f : 0.f;
         if (targetSpeed > 1.1f) targetSpeed = 1.1f;
         s_trying = targetSpeed > 0.02f;
         forwardSpeed = forwardSpeed * 0.86f + targetSpeed * 0.14f;

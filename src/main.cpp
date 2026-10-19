@@ -97,7 +97,7 @@ void setup() {
     }
 
     mantis::initControls();
-    mantis::universeInit(1337);
+    mantis::universeInit(esp_random() | 1u);      // a new world every time you wake it
     mantis::renderInit();
     mantis::fieldInit(currentYaw, totalDistance);
     mantis::sceneInit();

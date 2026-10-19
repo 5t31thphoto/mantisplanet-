@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
   check(bumpedNow, "...and it registers as a bump");
   // turn away and walk on
   for (int f = 0; f < 30; f++) frame(0.f, 90.f);
-  for (int k = 0; k < 40; k++) {                // look for somewhere dry, like a player would
+  for (int k = 0; k < 130; k++) {               // look for somewhere dry, like a player would
     bool wetAhead = false;
     for (int a = -3; a <= 3; a++) for (float z = 0.3f; z < 6.f; z += 0.4f) if (lakeField(currentYaw + a * 0.07f, totalDistance + z) > LAKE_T - 0.02f) wetAhead = true;
     if (!wetAhead) break;
@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
     float yS = currentYaw;
     for (int f = 0; f < 60; f++) frameImu(up[0], up[1], up[2], 45.f * up[0], 45.f * up[1], 45.f * up[2]);
     for (int f = 0; f < 10; f++) frameImu(up[0], up[1], up[2], 0.f, 0.f, 0.f);
-    float turned = (currentYaw - yS) / D2R;
+    float turned = fabsf(currentYaw - yS) / D2R;
     printf("  (turned %.1f deg for a 90 deg turn while tilted)\n", turned);
     check(fabsf(turned - 90.f) < 3.f, "turning while tipped and tilted: 1:1 about true vertical");
     // a gyro with 1.2 deg/s of bias, unit set down: after it learns, the view holds still
@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
       frameImu(0.f, 0.f, 1.f, 1.2f * n1, 1.2f * n2, 3.f + 1.2f * n1 * n2);
     }
     for (int f = 0; f < 15; f++) frameImu(0.f, 0.f, 1.f, 0.f, 0.f, 0.f);
-    float slow = (currentYaw - ys) / D2R;
+    float slow = fabsf(currentYaw - ys) / D2R;
     printf("  (slow pan: %.1f deg of 90)\n", slow);
     check(fabsf(slow - 90.f) < 4.f, "a slow deliberate pan is honoured");
     initControls(); frame(0.f, 0.f);

@@ -46,8 +46,10 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     float u = distance * 0.0016f + t * 0.0011f;
     float v = clampf((fbmP(0.f, u, 1, 3, 0x7EA7u) - 0.28f) / 0.46f, 0.f, 1.f);
     float cloudT = clampf(0.12f + v * 1.05f, 0.f, 1.f);
-    float rainT = smoothstep(0.62f, 0.78f, v);
-    float stormT = smoothstep(0.84f, 0.97f, v);
+    if (t < 300.f) cloudT = fminf(cloudT, 0.45f + 0.55f * smoothstep(150.f, 300.f, t));
+    float settle = smoothstep(150.f, 300.f, t);             // the dream always begins in fair weather
+    float rainT = smoothstep(0.62f, 0.78f, v) * settle;
+    float stormT = smoothstep(0.84f, 0.97f, v) * settle;
     float windT = 0.16f + 0.34f * fbmP(0.f, u * 3.f + 5.f, 1, 2, 0x3C1Du) + rainT * 0.2f + stormT * 0.5f;
     float dawn = bump(s.tod, 0.17f, 0.24f, 0.33f, 0.42f);
     float humid = fbmP(0.f, u * 2.f + 11.f, 1, 2, 0x6F06u);
