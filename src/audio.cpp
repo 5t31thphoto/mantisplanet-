@@ -13,7 +13,7 @@ uint32_t samples = 0;
 using namespace snd;
 
 // ---------------- game -> audio events: single producer, single consumer ----------------
-enum : uint8_t { EV_STEP, EV_BUMP, EV_THUNDER, EV_CRITTER, EV_MOMENT };
+enum : uint8_t { EV_STEP, EV_BUMP, EV_THUNDER, EV_CRITTER, EV_MOMENT, EV_FISH };
 struct Ev { uint8_t type, a; float x, y, z; };
 static Ev s_q[32];
 static volatile uint32_t s_head = 0, s_tail = 0;
@@ -34,6 +34,7 @@ static void drain() {
             case EV_BUMP:    natureBump(e.a); break;
             case EV_THUNDER: natureThunder(e.x, e.y, e.z); break;
             case EV_CRITTER: natureCritter(e.a, e.x); break;
+            case EV_FISH: natureFish(e.a, e.x); break;
             case EV_MOMENT:  musicMoment(e.a); break;
         }
         t = (t + 1) & 31u;
@@ -45,6 +46,7 @@ void sfxFootstep(uint8_t surface, float strength) { post({EV_STEP, surface, stre
 void sfxBump(uint8_t kind) { post({EV_BUMP, kind, 0, 0, 0}); }
 void sfxThunder(float delay, float power, float close) { post({EV_THUNDER, 0, delay, power, close}); }
 void sfxCritter(uint8_t kind, float dist) { post({EV_CRITTER, kind, dist, 0, 0}); }
+void sfxFish(uint8_t kind, float arg) { post({EV_FISH, kind, arg, 0, 0}); }
 void sfxMoment(uint8_t kind) { post({EV_MOMENT, kind, 0, 0, 0}); }
 
 // ---------------- master bus ----------------
@@ -56,7 +58,7 @@ static dsp::SVF s_hp;
 static volatile float s_kick = 0.f, s_groove = 0.f;
 static volatile bool s_muted = false;
 static float s_out = 1.f;          // speaker gain, ramped so muting never clicks
-static const int LATENCY = BLOCK * 2 + 600;     // queued block + the speaker's own buffers
+static const int LATENCY = BLOCK * 2 + 2600;    // queued block + the speaker driver's (deeper) DMA buffers
 
 float audioBeats() {
     int32_t heard = (int32_t)samples - LATENCY;
@@ -123,9 +125,19 @@ void audioBegin() {
     natureInit();
     musicInit();
 #ifndef HOST
-    if (!M5.Speaker.isEnabled()) M5.Speaker.begin();
+    // The speaker driver runs its own task that feeds the I2S DMA. By default it shares a priority with the
+    // LCD push (which keeps core 0 busy for most of each frame), and its DMA cushion is short, so it can run
+    // dry: a stutter even when the frame rate is fine. Give it top priority and ~85 ms of DMA to ride out
+    // any hiccup (flash writes, a slow frame). Nothing about the sound itself changes.
+    if (M5.Speaker.isEnabled()) M5.Speaker.end();
+    auto sc = M5.Speaker.config();
+    sc.task_priority = 5;
+    sc.dma_buf_len = 256;
+    sc.dma_buf_count = 16;
+    M5.Speaker.config(sc);
+    M5.Speaker.begin();
     M5.Speaker.setVolume(165);
-    xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 3, nullptr, 0);
+    xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 4, nullptr, 0);   // above the LCD push (2), below the driver (5)
 #endif
 }
 

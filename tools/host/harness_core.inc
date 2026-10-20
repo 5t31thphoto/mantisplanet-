@@ -24,12 +24,16 @@ static float g_maxGroove = 0.f;
 
 // One firmware frame at a fixed host frame time. tilt: accel.y offset (forward > 0),
 // turn: gyro z in deg/s.
+static float g_flickDps = 0.f, g_holdPitchDeg = -999.f;
 static void frame(float tilt, float turnDps, uint32_t frameUs = 33333) {
   g_us += frameUs;
-  // physical: a turn about true vertical shows up on whichever gyro axes gravity lies along
-  float n = sqrtf(tilt * tilt + 1.f);
-  M5.Imu.data.accel = {0.f, tilt / n, 1.f / n};
-  M5.Imu.data.gyro = {0.f, turnDps * tilt / n, turnDps / n};
+  // physical: held upright (gravity along y); 'tilt' > 0 tips the top away past the walk threshold.
+  // A turn about true vertical shows up on whichever gyro axes gravity lies along.
+  float th = tilt > 0.f ? (20.f + tilt * 70.f) * 0.0174533f : tilt * 60.f * 0.0174533f;   // < 0: tipped back toward you
+  if (g_holdPitchDeg > -900.f) th = g_holdPitchDeg * 0.0174533f;                       // fishing tests hold an exact pitch
+  M5.Imu.data.accel = {0.f, cosf(th), sinf(th)};
+  M5.Imu.data.gyro = {g_flickDps, turnDps * cosf(th), turnDps * sinf(th)};
+  g_flickDps = 0.f;
   float dBefore = totalDistance;
   loop();
   if (g_recordAudio && mantis::audioGroove() > g_maxGroove) g_maxGroove = mantis::audioGroove();

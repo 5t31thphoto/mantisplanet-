@@ -1,5 +1,6 @@
 // Nature: the bed you walk through. Everything is synthesized; nothing is sampled.
 #include "audio_int.h"
+#include "fishing.h"
 #include "audio.h"
 #include "universe.h"
 #include <string.h>
@@ -131,6 +132,25 @@ void natureFootstep(uint8_t surf, float st) {
             grain(0.f, 1, 900.f * pv, 350.f, 3.f, 0.015f, 0.06f, 0.12f * a);
             grain(0.06f, 1, 700.f, 300.f, 2.f, 0.02f, 0.07f, 0.06f * a);
             break;
+        case SURF_ICE:                                     // a crisp step on ice, a faint ring under it
+            grain(0.f, 0, 3200.f * pv, 2600.f, 1.2f, 0.004f, 0.03f, 0.06f * a, 0.25f);
+            ping(0.01f, 1600.f + rng.uni() * 300.f, 0.97f, 0.05f, 0.06f, 0.02f * a, 0.4f);
+            break;
+        case SURF_SAND:                                    // a soft gritty shuffle
+            grain(0.f, 0, 2600.f * pv, 2000.f, 0.7f, 0.014f, 0.05f, 0.07f * a, 0.1f);
+            grain(0.05f, 0, 1700.f * pv, 1300.f, 0.7f, 0.016f, 0.06f, 0.05f * a, 0.1f);
+            break;
+        case SURF_SNOW:                                    // a soft compressed crunch
+            grain(0.f, 0, 2000.f * pv, 1500.f, 0.8f, 0.015f, 0.06f, 0.08f * a, 0.15f);
+            grain(0.02f, 1, 800.f, 600.f, 1.2f, 0.02f, 0.08f, 0.09f * a, 0.15f);
+            grain(0.07f, 0, 2600.f, 2000.f, 1.f, 0.012f, 0.04f, 0.04f * a, 0.15f);
+            break;
+        case SURF_SPLASH:                                  // wading: a slosh, a spray, a bubble or two
+            grain(0.f, 1, 1400.f * pv, 450.f, 2.2f, 0.01f, 0.08f, 0.13f * a, 0.3f);
+            grain(0.03f, 0, 3200.f, 2400.f, 0.9f, 0.012f, 0.05f, 0.05f * a, 0.3f);
+            grain(0.07f, 1, 900.f, 400.f, 1.8f, 0.02f, 0.09f, 0.07f * a, 0.3f);
+            ping(0.06f, 420.f + rng.uni() * 200.f, 1.12f, 0.04f, 0.03f, 0.03f * a, 0.5f);
+            break;
         case SURF_WET:
             grain(0.f, 0, 1800.f * pv, 1300.f, 0.8f, 0.012f, 0.05f, 0.09f * a);
             grain(0.06f, 1, 900.f, 500.f, 1.6f, 0.015f, 0.05f, 0.06f * a);
@@ -174,6 +194,25 @@ void natureCritter(uint8_t kind, float dist) {
         }
     } else if (kind == CRIT_RABBIT) {
         for (int i = 0; i < 4; i++) grain(i * 0.07f, 0, 2400.f, 1800.f, 1.f, 0.003f, 0.02f, 0.08f * g, 0.2f);
+    } else if (kind == CRIT_DUCK) {                         // two quacks, then wings beating away
+        for (int q = 0; q < 2; q++) {
+            float t0 = q * 0.22f;
+            grain(t0, 0, 950.f, 800.f, 4.f, 0.008f, 0.07f, 0.14f * g, 0.3f);
+            grain(t0, 0, 1900.f, 1600.f, 3.f, 0.008f, 0.05f, 0.05f * g, 0.3f);
+        }
+        for (int i = 0; i < 10; i++) grain(0.45f + i * 0.06f, 0, 900.f, 1100.f, 1.f, 0.008f, 0.025f, (0.1f - i * 0.008f) * g, 0.4f);
+    } else if (kind == CRIT_HERON) {                        // a rough "fraank" and slow wingbeats
+        grain(0.f, 0, 700.f, 560.f, 2.f, 0.012f, 0.16f, 0.16f * g, 0.35f);
+        for (int i = 0; i < 6; i++) grain(0.3f + i * 0.26f, 0, 800.f, 900.f, 1.f, 0.02f, 0.05f, (0.08f - i * 0.01f) * g, 0.4f);
+    } else if (kind == CRIT_BEAVER) {                       // a waddle through the reeds
+        for (int i = 0; i < 4; i++) grain(i * 0.12f, 0, 1500.f, 1200.f, 1.f, 0.01f, 0.03f, 0.06f * g, 0.25f);
+    } else if (kind == CRIT_SPLASH) {                       // the plunge
+        grain(0.f, 1, 1800.f, 400.f, 2.f, 0.004f, 0.12f, 0.24f * g, 0.4f);
+        grain(0.02f, 0, 3200.f, 2000.f, 1.f, 0.006f, 0.06f, 0.08f * g, 0.4f);
+        for (int i = 0; i < 3; i++) ping(0.08f + i * 0.07f, 360.f + rng.uni() * 200.f, 1.12f, 0.04f, 0.03f, 0.04f * g, 0.5f);
+    } else if (kind == CRIT_SQUIRREL) {                     // a soft chitter and claws on bark
+        for (int i = 0; i < 6; i++) grain(i * 0.045f, 0, 2500.f + rng.uni() * 300.f, 2400.f, 9.f, 0.006f, 0.02f, 0.05f * g, 0.25f);
+        for (int i = 0; i < 5; i++) grain(0.35f + i * 0.08f, 0, 1300.f, 1100.f, 1.2f, 0.006f, 0.02f, 0.04f * g, 0.25f);
     } else {
         for (int i = 0; i < 12; i++) grain(i * 0.035f, 0, 1100.f, 1300.f, 1.f, 0.004f, 0.015f, (0.14f - i * 0.009f) * g, 0.4f);
         for (int i = 0; i < 3; i++) ping(0.05f + i * 0.13f, 3900.f, 0.8f, 0.04f, 0.035f, 0.05f * g, 0.4f);
@@ -252,7 +291,7 @@ static void windBlock(Bus& b, int n, const Scene& s) {
     s_windBP.set(230.f + 950.f * gust + 300.f * s.storm, 0.75f);
     s_windLow.set(160.f + 120.f * gust, 0.6f);
     s_whistle.set(950.f + 800.f * gust, 9.f);
-    float target = (0.04f + 0.42f * gust) * (0.55f + 0.45f * s.open);
+    float target = (0.04f + 0.42f * gust) * (0.55f + 0.45f * s.open) * (1.f - 0.35f * s.hush);
     // Leaves: thousands of tiny contacts blur into a soft "shhh". Two noise bands (a shimmer and a
     // leafy body) under a flutter that glides between random levels every few ms, so it moves
     // like foliage without a single sharp onset. Gusts swell it; under trees it's much stronger.
@@ -277,7 +316,130 @@ static void windBlock(Bus& b, int n, const Scene& s) {
 // ================= water: lapping + bubbles =================
 static dsp::SVF s_lapLP;
 static float s_lapBrown = 0.f, s_lapEnv = 0.f, s_lapTarget = 0.f, s_lapTimer = 0.f, s_lapG = 0.f;
+static dsp::SVF s_brook, s_roarBP, s_roarHi;
+static dsp::Pink s_roarPink;
+static float s_roarG = 0.f;
+static float s_brookG = 0.f, s_bFlut = 0.f, s_bFlutT = 0.f;
+static int s_bFlutN = 0;
+static void brookBlock(Bus& b, int n, const Scene& s) {
+    float target = s.streamNear * 0.09f;
+    if (target < 0.001f && s_brookG < 0.0005f) return;
+    s_brook.set(1700.f, 0.8f);
+    if (rng.uni() < s.streamNear * 3.f * n / dsp::SR) ping(0.f, 380.f + rng.uni() * 300.f, 1.1f, 0.04f, 0.025f, 0.02f, 0.5f);
+    for (int i = 0; i < n; i++) {
+        s_brookG += (target - s_brookG) * 0.0003f;
+        if (--s_bFlutN <= 0) { s_bFlutN = 40 + (int)(rng.next() % 90u); s_bFlutT = rng.uni(); }
+        s_bFlut += (s_bFlutT - s_bFlut) * 0.01f;           // a babble: busy, but never a click
+        float v = s_brook.bp(rng.bi()) * (0.45f + 0.55f * s_bFlut) * s_brookG;
+        b.dry[i] += v;
+        b.rev[i] += v * 0.35f;
+    }
+}
+
+// The garden: a bamboo water fountain tipping now and then (a hollow "tock"), and glass wind chimes.
+static float s_shishiT = 8.f, s_chimeT = 5.f;
+static void gardenBlock(const Scene& s, int n) {
+    if (s.japan < 0.5f) return;
+    float dt = (float)n / dsp::SR;
+    s_shishiT -= dt; s_chimeT -= dt;
+    if (s_shishiT <= 0.f) {
+        s_shishiT = 12.f + rng.uni() * 12.f;
+        if (s.lakeNear > 0.1f || s.streamNear > 0.1f) {
+            ping(0.f, 430.f, 0.93f, 0.05f, 0.09f, 0.11f, 0.45f);
+            grain(0.f, 0, 650.f, 600.f, 6.f, 0.001f, 0.04f, 0.08f, 0.45f);
+            grain(0.15f, 1, 1200.f, 600.f, 1.f, 0.05f, 0.4f, 0.03f, 0.4f);        // the water running out
+        }
+    }
+    if (s_chimeT <= 0.f) {
+        s_chimeT = 6.f + rng.uni() * 10.f / (0.3f + s.gust);
+        int k = 2 + (int)(rng.uni() * 3.f);
+        for (int i = 0; i < k; i++) ping(i * (0.12f + rng.uni() * 0.15f), 2600.f + rng.uni() * 1300.f, 1.f, 0.1f, 0.7f, 0.02f, 0.75f);
+    }
+}
+
+// ---------------- fishing ----------------
+void natureFish(uint8_t kind, float) {
+    switch (kind) {
+        case FISH_CAST:    grain(0.f, 0, 2400.f, 700.f, 1.5f, 0.05f, 0.18f, 0.08f, 0.2f); break;            // the swish of the cast
+        case FISH_PLOP:    ping(0.f, 340.f, 1.15f, 0.05f, 0.06f, 0.07f, 0.4f); grain(0.f, 1, 1600.f, 500.f, 1.5f, 0.004f, 0.08f, 0.1f, 0.35f); break;
+        case FISH_NIBBLE:  ping(0.f, 520.f + rng.uni() * 120.f, 1.1f, 0.03f, 0.03f, 0.03f, 0.4f); break;
+        case FISH_BITE:    grain(0.f, 1, 1800.f, 450.f, 2.f, 0.004f, 0.12f, 0.18f, 0.35f); ping(0.04f, 300.f, 1.2f, 0.05f, 0.05f, 0.05f, 0.4f); break;
+        case FISH_HOOKSET: grain(0.f, 0, 3000.f, 900.f, 2.f, 0.01f, 0.1f, 0.1f, 0.2f); break;              // the rod whips up
+        case FISH_RUN:     break;                                                                           // the drag says it (continuous)
+        case FISH_JUMP:    grain(0.f, 1, 2000.f, 500.f, 2.f, 0.003f, 0.15f, 0.2f, 0.4f); grain(0.6f, 1, 1500.f, 400.f, 2.f, 0.003f, 0.2f, 0.22f, 0.4f); break;
+        case FISH_SNAP:    ping(0.f, 1900.f, 0.55f, 0.15f, 0.12f, 0.08f, 0.3f); break;                      // twang
+        case FISH_MISS:    grain(0.f, 1, 1200.f, 500.f, 1.5f, 0.004f, 0.06f, 0.05f, 0.3f); break;
+        case FISH_LANDED:  grain(0.f, 1, 1800.f, 400.f, 2.f, 0.004f, 0.25f, 0.2f, 0.4f); for (int i = 0; i < 5; i++) ping(0.3f + i * 0.17f, 700.f + rng.uni() * 500.f, 1.1f, 0.03f, 0.03f, 0.025f, 0.5f); break;
+        case FISH_STOW:    grain(0.f, 0, 1400.f, 1100.f, 1.f, 0.02f, 0.1f, 0.04f, 0.15f); break;
+        case FISH_BUG:     ping(0.f, 1760.f, 1.f, 0.02f, 0.25f, 0.035f, 0.5f); ping(0.08f, 2350.f, 1.f, 0.02f, 0.3f, 0.03f, 0.55f); break;   // into the jar
+        case FISH_SHUTTER: grain(0.f, 0, 3500.f, 3000.f, 1.f, 0.002f, 0.02f, 0.07f, 0.1f); grain(0.07f, 0, 2500.f, 2000.f, 1.f, 0.002f, 0.025f, 0.05f, 0.1f); break;   // a camera shutter
+    }
+}
+
+// The fight, continuous: the drag zinging as the fish takes line, a soft muffled reel ratchet as you crank.
+static dsp::SVF s_drag;
+static float s_dragG = 0.f, s_reelPh = 0.f;
+static void fishBlock(Bus& b, int n) {
+    const FishView& F = fishingView();
+    float dragT = F.state == FS_FIGHT ? clampf((F.lineSpeed - 0.4f) / 2.f, 0.f, 1.f) * 0.12f : 0.f;
+    if (dragT < 0.001f && s_dragG < 0.0005f && !(F.state == FS_FIGHT && F.reel > 0.05f)) return;
+    s_drag.set(2600.f + 1400.f * clampf(F.lineSpeed / 3.f, 0.f, 1.f), 5.f);
+    for (int i = 0; i < n; i++) {
+        s_dragG += (dragT - s_dragG) * 0.002f;
+        b.dry[i] += s_drag.bp(rng.bi()) * s_dragG;
+    }
+    if (F.state == FS_FIGHT && F.reel > 0.05f) {                      // reel clicks: soft and low, never a rattle
+        s_reelPh += (float)n / dsp::SR * (6.f + 10.f * F.reel);
+        while (s_reelPh >= 1.f) { s_reelPh -= 1.f; grain(0.f, 1, 900.f, 700.f, 1.2f, 0.003f, 0.012f, 0.025f, 0.05f); }
+    }
+}
+
+// The surf: a swell gathers, breaks, and hisses back down the sand.
+static dsp::SVF s_surfLP, s_surfHi;
+static dsp::Pink s_surfPink;
+static float s_surfT = 0.f, s_surfPeriod = 9.f, s_surfG = 0.f, s_surfBrown = 0.f;
+static void surfBlock(Bus& b, int n, const Scene& s) {
+    float target = s.oceanNear * 0.3f;
+    if (target < 0.001f && s_surfG < 0.0005f) return;
+    float dt = (float)n / dsp::SR;
+    s_surfT += dt;
+    if (s_surfT > s_surfPeriod) { s_surfT = 0.f; s_surfPeriod = 7.f + rng.uni() * 5.f; }
+    float u = s_surfT / s_surfPeriod;
+    float build = u < 0.55f ? u / 0.55f : 0.f;                              // the swell gathering
+    float crash = u >= 0.55f ? expf(-(u - 0.55f) * s_surfPeriod * 1.6f) : 0.f;   // breaking
+    float wash = u >= 0.58f ? expf(-(u - 0.58f) * s_surfPeriod * 0.5f) : 0.f;    // hissing back
+    s_surfLP.set(300.f + 900.f * crash + 200.f * build, 0.7f);
+    s_surfHi.set(3500.f, 0.6f);
+    for (int i = 0; i < n; i++) {
+        s_surfG += (target - s_surfG) * 0.0002f;
+        float w = rng.bi(), p = s_surfPink.tick(w);
+        s_surfBrown = (s_surfBrown + w * 0.03f) * 0.997f;
+        float v = (s_surfLP.lp(p) * (0.25f + 0.6f * build * build + 1.4f * crash) + s_surfHi.bp(w) * 0.5f * wash + s_surfBrown * 0.6f) * s_surfG;
+        b.dry[i] += v;
+        b.rev[i] += v * 0.35f;
+    }
+}
+
+static void roarBlock(Bus& b, int n, const Scene& s) {
+    float target = s.fallsNear * 0.16f;
+    if (target < 0.001f && s_roarG < 0.0005f) return;
+    s_roarBP.set(700.f, 0.6f);
+    s_roarHi.set(2600.f, 0.7f);
+    for (int i = 0; i < n; i++) {
+        s_roarG += (target - s_roarG) * 0.0002f;
+        float w = rng.bi(), p = s_roarPink.tick(w);
+        float v = (s_roarBP.bp(p) * 1.4f + s_roarHi.bp(w) * 0.35f) * s_roarG;   // a steady soft roar
+        b.dry[i] += v;
+        b.rev[i] += v * 0.4f;
+    }
+}
+
 static void waterBlock(Bus& b, int n, const Scene& s) {
+    brookBlock(b, n, s);
+    roarBlock(b, n, s);
+    surfBlock(b, n, s);
+    gardenBlock(s, n);
+    fishBlock(b, n);
     float lv = s.lakeNear;
     s_lapG += (lv - s_lapG) * 0.05f;
     if (s_lapG < 0.01f && s.rain < 0.05f) return;
@@ -307,8 +469,8 @@ static void rainBlock(Bus& b, int n, const Scene& s) {
     if (s_rainG < 0.005f) return;
     s_rainLP.set(5200.f + 1500.f * s.storm, 0.7f);
     const float hk = dsp::coef(1400.f);
-    float pDrop = s_rainG * (0.006f + 0.01f * s.storm);
-    float hiss = powf(s_rainG, 1.3f) * (0.16f + 0.1f * s.storm);
+    float pDrop = s_rainG * (0.006f + 0.01f * s.storm) * (1.f - s.snowy);
+    float hiss = powf(s_rainG, 1.3f) * (0.16f + 0.1f * s.storm) * (1.f - 0.85f * s.snowy);   // snow falls nearly silent
     for (int i = 0; i < n; i++) {
         float w = rng.bi();
         s_rainHP += hk * (w - s_rainHP);
@@ -330,7 +492,7 @@ static void rainBlock(Bus& b, int n, const Scene& s) {
 }
 
 // ================= birds =================
-enum : uint8_t { SP_SONG, SP_TRILL, SP_FEEBEE, SP_DOVE, SP_OWL, SP_LOON, SP_N };
+enum : uint8_t { SP_SONG, SP_TRILL, SP_FEEBEE, SP_DOVE, SP_OWL, SP_LOON, SP_CUCKOO, SP_CROW, SP_HAWK, SP_COYOTE, SP_THRUSH, SP_GULL, SP_ICESING, SP_PARROT, SP_HOWLER, SP_N };
 struct Syl { float f0, f1, dur, gap, fm, fmD, harm, breath; };
 struct Bird {
     bool on = false;
@@ -403,6 +565,53 @@ static int makeSong(Syl* out, uint8_t sp, uint32_t id) {
             out[n++] = {f, f * 0.98f, 0.16f, 0.25f, 0.f, 0.f, 0.1f, 0.18f};
             out[n++] = {f * 1.02f, f * 0.94f, 0.7f, 0.f, 0.f, 0.f, 0.1f, 0.2f};
         } break;
+        case SP_CUCKOO: {                                 // cu-coo, a falling third, a few times over
+            int k = 2 + (int)(r.uni() * 3.f);
+            float f = 640.f + r.uni() * 40.f;
+            for (int j = 0; j < k && n < 26; j++) {
+                out[n++] = {f, f * 0.985f, 0.2f, 0.12f, 0.f, 0.f, 0.12f, 0.04f};
+                out[n++] = {f * 0.84f, f * 0.83f, 0.3f, 0.55f + v.uni() * 0.15f, 0.f, 0.f, 0.12f, 0.04f};
+            }
+        } break;
+        case SP_CROW: {                                   // a few rough caws
+            int k = 2 + (int)(r.uni() * 2.f);
+            float f = 480.f + r.uni() * 80.f;
+            for (int j = 0; j < k; j++) out[n++] = {f, f * 0.82f, 0.26f, 0.22f + v.uni() * 0.1f, 32.f, 0.06f, 0.6f, 0.35f};
+        } break;
+        case SP_ICESING: {                                // frozen lake ice "singing": a long falling pew, echoing
+            out[n++] = {2600.f, 320.f, 1.1f, 0.6f, 0.f, 0.f, 0.f, 0.f};
+            out[n++] = {1900.f, 280.f, 0.9f, 0.f, 0.f, 0.f, 0.f, 0.f};
+        } break;
+        case SP_PARROT: {                                 // rough squawks
+            int k = 2 + (int)(r.uni() * 3.f);
+            float f = 1600.f + r.uni() * 700.f;
+            for (int j = 0; j < k; j++) out[n++] = {f, f * (0.75f + r.uni() * 0.4f), 0.12f, 0.1f + v.uni() * 0.15f, 45.f, 0.08f, 0.7f, 0.45f};
+        } break;
+        case SP_HOWLER: {                                 // howler monkeys: a far, rolling roar
+            for (int j = 0; j < 4; j++) out[n++] = {340.f + r.uni() * 60.f, 300.f, 0.7f, 0.15f, 9.f, 0.08f, 0.8f, 0.6f};
+        } break;
+        case SP_GULL: {                                   // kyow, kyow, kyow
+            int k = 3 + (int)(r.uni() * 3.f);
+            float f = 1300.f + r.uni() * 300.f;
+            for (int j = 0; j < k; j++) out[n++] = {f * 1.1f, f * 0.82f, 0.17f, 0.12f + v.uni() * 0.08f, 0.f, 0.f, 0.45f, 0.22f};
+        } break;
+        case SP_THRUSH: {                                 // the varied thrush: one long eerie buzzing whistle, then another
+            float f = 2700.f + r.uni() * 600.f;
+            out[n++] = {f, f * 0.99f, 1.f + v.uni() * 0.3f, 1.4f + v.uni(), 70.f, 0.015f, 0.08f, 0.04f};
+            out[n++] = {f * (0.82f + r.uni() * 0.3f), f * 0.8f, 0.9f, 0.f, 70.f, 0.015f, 0.08f, 0.04f};
+        } break;
+        case SP_HAWK: {                                   // a long, falling "kee-eeer" from high up
+            float f = 2400.f + r.uni() * 300.f;
+            out[n++] = {f * 0.9f, f, 0.12f, 0.02f, 0.f, 0.f, 0.25f, 0.12f};
+            out[n++] = {f, f * 0.72f, 0.9f, 0.f, 18.f, 0.03f, 0.25f, 0.15f};
+        } break;
+        case SP_COYOTE: {                                 // a rising howl, then yips
+            float f = 520.f + r.uni() * 60.f;
+            out[n++] = {f, f * 1.5f, 0.8f, 0.f, 5.f, 0.02f, 0.3f, 0.12f};
+            out[n++] = {f * 1.5f, f * 1.3f, 1.2f, 0.35f, 5.f, 0.025f, 0.3f, 0.12f};
+            for (int j = 0; j < 4; j++) out[n++] = {f * 1.8f, f * 2.1f, 0.07f, 0.09f + v.uni() * 0.05f, 0.f, 0.f, 0.3f, 0.15f};
+            out[n++] = {f * 1.2f, f * 1.45f, 0.9f, 0.f, 5.f, 0.02f, 0.3f, 0.12f};
+        } break;
         case SP_LOON: {                                   // the wail across the water
             float f = 640.f + r.uni() * 60.f;
             out[n++] = {f, f * 1.55f, 1.1f, 0.05f, 5.5f, 0.012f, 0.18f, 0.03f};
@@ -440,7 +649,7 @@ static void birdSchedule(const Scene& s, float dt) {
     float afterRain = (s.rainAgo > 4.f && s.rainAgo < 70.f) ? 0.9f : 0.f;
     float hush = 1.f - s.rain * 0.92f - s.storm * 0.08f;
     float still = 0.7f + 0.3f * clampf(s.stillFor / 10.f, 0.f, 1.f);
-    float rate = ((dawn * 1.6f + day * 0.45f + dusk * 0.4f + afterRain) * hush + night * 0.12f) * still;   // songs per second
+    float rate = ((dawn * 1.6f + day * 0.45f + dusk * 0.4f + afterRain) * hush + night * 0.12f) * still * (1.f - 0.45f * s.hush);   // songs per second
     s_birdClock += dt;
     if (s_reply.on && s.t >= s_reply.at) {
         startBird(s_reply.sp, s_reply.id, 0.35f + rng.uni() * 0.6f, s.yaw + (rng.uni() - 0.5f) * 5.f);
@@ -449,15 +658,24 @@ static void birdSchedule(const Scene& s, float dt) {
     if (rng.uni() > rate * dt) return;
     uint8_t sp;
     float r = rng.uni();
-    if (night > 0.5f) sp = (s.lakeNear > 0.25f && r < 0.6f) ? SP_LOON : SP_OWL;
+    if (s.desert > 0.5f) sp = night > 0.5f ? SP_COYOTE : (r < 0.35f ? SP_HAWK : SP_DOVE);
+    else if (s.tundra > 0.5f && night > 0.5f) sp = s.lakeNear > 0.2f && r < 0.5f ? SP_ICESING : SP_OWL;   // the desert: hawks by day, coyotes by night
+    else if (night > 0.5f) sp = (s.lakeNear > 0.25f && r < 0.6f) ? SP_LOON : SP_OWL;
     else if (dusk > 0.5f && s.lakeNear > 0.3f && r < 0.25f) sp = SP_LOON;
+    else if (s.oceanNear > 0.2f && r < 0.5f) sp = SP_GULL;
+    else if (s.tundra > 0.5f && s.lakeNear > 0.2f && r < 0.35f) sp = SP_ICESING;
+    else if (s.tropical > 0.5f && dawn > 0.3f && r < 0.25f) sp = SP_HOWLER;
+    else if (s.tropical > 0.5f && r < 0.5f) sp = SP_PARROT;
+    else if (s.giant > 0.5f && r < 0.45f) sp = SP_THRUSH;
+    else if (s.cuckoo > 0.5f && r < 0.22f) sp = SP_CUCKOO;
+    else if (s.crows > 0.5f && r < 0.25f) sp = SP_CROW;
     else if (r < 0.38f) sp = SP_SONG;
     else if (r < 0.38f + 0.2f + 0.15f * s.forestNear) sp = SP_TRILL;
     else if (r < 0.78f) sp = SP_FEEBEE;
     else sp = SP_DOVE;
     uint32_t id = rng.next() & 3u;
     startBird(sp, id, 0.2f + rng.uni() * 0.8f, s.yaw + (rng.uni() - 0.5f) * 6.f);
-    if (sp != SP_LOON && rng.uni() < 0.45f) s_reply = {true, s.t + 0.8f + rng.uni() * 2.f, sp, (id + 1) & 3u};
+    if (sp != SP_LOON && sp != SP_HAWK && sp != SP_ICESING && rng.uni() < 0.45f) s_reply = {true, s.t + 0.8f + rng.uni() * 2.f, sp, (id + 1) & 3u};
 }
 
 static void birdsBlock(Bus& bus, int n, const Scene& s) {
@@ -465,7 +683,7 @@ static void birdsBlock(Bus& bus, int n, const Scene& s) {
     for (Bird& b : s_bird) {
         if (!b.on) continue;
         float front = 0.55f + 0.45f * cosf(wrapPi(b.angle - s.yaw));      // what you face is clearer
-        float base = (b.sp == SP_LOON ? 0.26f : b.sp == SP_OWL || b.sp == SP_DOVE ? 0.22f : 0.15f) * (1.f - 0.65f * b.dist) * front;
+        float base = (b.sp == SP_LOON || b.sp == SP_COYOTE || b.sp == SP_ICESING ? 0.26f : b.sp == SP_HOWLER ? 0.2f : b.sp == SP_HAWK ? 0.1f : b.sp == SP_OWL || b.sp == SP_DOVE || b.sp == SP_CUCKOO ? 0.22f : b.sp == SP_CROW ? 0.12f : 0.15f) * (1.f - 0.65f * b.dist) * front;
         for (int i = 0; i < n && b.on; i++) {
             Syl& y = b.syl[b.i];
             float v = 0.f;
@@ -518,7 +736,7 @@ static void insectsBlock(Bus& b, int n, const Scene& s) {
     s_crLevel += (crT - s_crLevel) * clampf(dtb * 0.6f, 0.f, 1.f);
     float cicT = bumpf(tod, 0.42f, 0.48f, 0.62f, 0.68f) * s.open * (1.f - s.cloud * 0.8f) * (1.f - s.rain) * 0.028f;
     s_cicLevel += (cicT - s_cicLevel) * clampf(dtb * 0.3f, 0.f, 1.f);
-    float frT = (nightish * 0.8f + s.wet * 0.5f) * s.lakeNear * (1.f - s.rain * 0.5f) * hush;
+    float frT = (nightish * 0.8f + s.wet * 0.5f + s.frogBoost * 0.7f) * fmaxf(s.lakeNear, s.frogBoost * 0.6f) * (1.f - s.rain * 0.5f) * hush;
     s_frogLevel += (frT - s_frogLevel) * clampf(dtb * 0.4f, 0.f, 1.f);
 
     // individual crickets come and go

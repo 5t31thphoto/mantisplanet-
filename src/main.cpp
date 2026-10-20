@@ -11,6 +11,12 @@
 #include "display.h"
 #include "haptics.h"
 #include "audio.h"
+#include "journey.h"
+#include "fishing.h"
+#include "trophy.h"
+#include "storage.h"
+#include "wall.h"
+#include "bugs.h"
 #ifndef HOST
 #include <Preferences.h>
 #endif
@@ -28,6 +34,13 @@ static uint32_t touchDown = 0;
 static int touchX0 = 0, touchY0 = 0;
 static bool longFired = false;
 static uint32_t muteIconAt = 0;
+static bool tapPending = false;
+static int tapX = 0, tapY = 0;
+static uint8_t prevFishState = 0;
+static uint32_t landedAt = 0;
+static bool trophySaved = false;
+static bool showFps = false;
+static float fpsAvg = 30.f;
 
 static void saveMute(bool m) {
 #ifndef HOST
@@ -63,7 +76,10 @@ static void serviceTouch() {
             muteIconAt = now;
         }
     }
-    if (td.wasReleased()) touchDown = 0;
+    if (td.wasReleased()) {
+        if (touchDown && !longFired && now - touchDown < 350 && touchY0 < 240) { tapPending = true; tapX = touchX0; tapY = touchY0; }   // a short tap on the screen
+        touchDown = 0;
+    }
 }
 
 static uint8_t bumpKind() {
@@ -97,8 +113,20 @@ void setup() {
     }
 
     mantis::initControls();
-    mantis::universeInit(esp_random() | 1u);      // a new world every time you wake it
+    // A new world every time you wake it, but never one that starts you in the water or boxed in by it.
+    for (int tries = 0; tries < 24; tries++) {
+        mantis::universeInit(esp_random() | 1u);
+        mantis::journeyInit(mantis::worldSeed(), 0.f);
+        int wet = 0, n = 0;
+        bool underfoot = mantis::lakeField(0.f, 0.f) > mantis::LAKE_T - 0.05f;
+        for (int k = 0; k < 16; k++)
+            for (float z = 2.f; z < 30.f; z += 4.f, n++)
+                if (mantis::lakeField(k * 0.3927f, z) > mantis::LAKE_T) wet++;
+        if (!underfoot && wet * 4 < n) break;                   // dry feet, mostly open land around
+    }
     mantis::renderInit();
+    mantis::storageBegin();                       // the SD card, if there is one
+    mantis::bugsInit();
     mantis::fieldInit(currentYaw, totalDistance);
     mantis::sceneInit();
     mantis::displayInit();
@@ -118,7 +146,17 @@ void loop() {
 
     bool trying = false;
     mantis::updateControls(dt, currentYaw, currentSpeed, trying);   // calls M5.update()
+    if (mantis::fishingActive() || mantis::wallActive()) { currentSpeed = 0.f; trying = false; }   // the rod is out / the wall is up: tilts don't walk
     serviceTouch();
+    if (M5.BtnB.wasPressed()) { if (mantis::fishingActive()) mantis::baitCycle(); else showFps = !showFps; }   // middle button: bait (rod out) / frame rate
+    if (M5.BtnC.wasPressed()) {                               // the right touch button: the catch wall
+        if (mantis::wallActive()) mantis::wallClose();
+        else if (!mantis::fishingActive()) mantis::wallOpen();
+    }
+    if (M5.BtnA.wasPressed()) {                               // the left touch button: a screenshot to SD
+        if (mantis::storageScreenshot()) { mantis::sfxFish(mantis::FISH_SHUTTER, 0.f); hx::fishTick(0.5f); }
+    }
+    fpsAvg += (1.f / dt - fpsAvg) * 0.05f;
 
     // Walk. Head-on into something solid you stop with a bump and have to find another way;
     // glancing off the side of it you slide past. A shore stops you too.
@@ -126,6 +164,7 @@ void loop() {
     bool bumped = false;
     float moved = mantis::fieldStep(currentYaw, want, totalDistance, &bumped);
     totalDistance += moved;
+    mantis::journeyUpdate(totalDistance, currentYaw, moved);
     bool stopped = bumped && moved < want * 0.35f;
     if (stopped && !wasBumped) { hx::bump(); mantis::sfxBump(bumpKind()); }
     wasBumped = stopped;
@@ -133,13 +172,32 @@ void loop() {
     float walkSpeed = moved / (dt * 9.0f);
     mantis::sceneUpdate(t, dt, currentYaw, totalDistance, walkSpeed, trying);
     const mantis::Scene& sc = mantis::g_scene;
+    if (tapPending) {
+        tapPending = false;
+        if (mantis::wallActive()) mantis::wallTap(tapX, tapY);
+        else if (!mantis::bugsTryCatch(tapX, tapY)) mantis::fishingTap(currentYaw, totalDistance);   // a bug first, then the water
+    }
+    mantis::fishingUpdate(dt, currentYaw, totalDistance, mantis::controlsPitchDeg(), mantis::controlsFlickDps(), sc);
+    mantis::bugsUpdate(dt, currentYaw, totalDistance, walkSpeed, sc);
+    {   // landed: hold it up on the trophy card; a moment later it's saved to the card
+        uint8_t fs = mantis::fishingView().state;
+        if (fs == mantis::FS_LANDED && prevFishState != mantis::FS_LANDED) { mantis::trophyBuild(mantis::fishingSpec()); mantis::overlayEnable(true); landedAt = millis(); trophySaved = false; }
+        if (fs == mantis::FS_LANDED && !trophySaved && millis() - landedAt > 700) { mantis::storageSaveTrophy(mantis::fishingSpec()); trophySaved = true; }
+        if (fs != mantis::FS_LANDED && prevFishState == mantis::FS_LANDED) mantis::overlayEnable(false);
+        prevFishState = fs;
+    }
 
-    if (mantis::fieldTick(currentYaw, totalDistance, t, dt, walkSpeed, sc.stillFor)) {
-        const mantis::FieldCritter& c = mantis::fieldCritter();
-        float d = sqrtf(c.x * c.x + c.y * c.y);
-        uint8_t k = c.kind == 0 ? mantis::CRIT_DEER : c.kind == 1 ? mantis::CRIT_RABBIT : mantis::CRIT_BIRDS;
-        mantis::sfxCritter(k, d);
-        if (c.kind == 0) hx::hooves(d);
+    int bolts = mantis::fieldTick(currentYaw, totalDistance, t, dt, walkSpeed, sc.stillFor);
+    for (int i = 0; i < bolts; i++) {
+        uint8_t kind; float d;
+        mantis::fieldBolt(i, kind, d);
+        if (kind & 0x80) { mantis::sfxCritter(mantis::CRIT_SPLASH, d); continue; }
+        static const uint8_t MAP[7] = {mantis::CRIT_DEER, mantis::CRIT_RABBIT, mantis::CRIT_BIRDS, mantis::CRIT_BUTTERFLY,
+                                       mantis::CRIT_DUCK, mantis::CRIT_BEAVER, mantis::CRIT_SQUIRREL};
+        uint8_t variant = kind >> 4;
+        kind &= 15;
+        mantis::sfxCritter(kind == mantis::CR_DUCK && variant == 1 ? (uint8_t)mantis::CRIT_HERON : MAP[kind < 7 ? kind : 0], d);
+        if (kind == mantis::CR_DEER) hx::hooves(d);
     }
 
     // Footsteps follow your pace: a slow walk is ~1.3 steps a second, a brisk one ~2.2. Stop and they stop.
@@ -159,6 +217,9 @@ void loop() {
     if (!introBell && t > 0.8f) { introBell = true; mantis::sfxMoment(mantis::MOMENT_INTRO); hx::heartbeat(); }
     static float lastAwe = 0.f;
     if (sc.awe > 0.6f && lastAwe <= 0.6f) hx::swell();
+    static float lastTodH = 0.f;
+    if (sc.japan > 0.5f && lastTodH < 0.715f && sc.tod >= 0.715f) hx::swell();     // feel the temple bell
+    lastTodH = sc.tod;
     lastAwe = sc.awe;
     hx::update(dt);
 
@@ -169,5 +230,6 @@ void loop() {
         if (a <= 0.f) muteIconAt = 0;
         else mantis::renderMuteIcon(mantis::audioMuted(), a);
     }
+    if (showFps) mantis::renderFps((int)(fpsAvg + 0.5f));
     mantis::displayPresent();
 }

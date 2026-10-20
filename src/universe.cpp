@@ -1,4 +1,5 @@
 #include "universe.h"
+#include "journey.h"
 #include <math.h>
 
 namespace mantis {
@@ -44,11 +45,36 @@ void setTimeOfDay(float tod, float t, float distance) {
     s_dayOffset += tod - (c - floorf(c));
 }
 
-float lakeField(float a, float D)   { return fbmP(angU(a, 6), D * 0.03f, 6, 3, 0x1A4Eu); }
+float oceanShore(float a, float D) {
+    const BiomeParams& b = biomeAt(D);
+    if (b.ocean < 0.5f) return 1e9f;
+    float dw = fabsf(a - 3.14159265f - kTau * floorf((a - 3.14159265f + 3.14159265f) / kTau));   // angle away from due west
+    if (dw > 1.25f) return 1e9f;                                       // north and south you walk along the shore
+    float wob = (fbmP(angU(a, 8), 0.f, 8, 2, 0xC0A5u) - 0.5f) * 30.f;
+    return biomeStart(D) + 260.f + dw * dw * 110.f + wob;
+}
+
+bool paddyAt(float a, float D) {
+    if (biomeAt(D).paddies < 0.5f) return false;
+    float terrace = D * 0.075f + fbmP(angU(a, 4), D * 0.004f, 4, 1, 0x7E44u) * 1.5f;   // terraces step across the land
+    if (terrace - floorf(terrace) > 0.6f) return false;                               // the dike between two terraces: wide enough to walk
+    return fbmP(angU(a, 6), D * 0.01f, 6, 2, 0x9A1Du) > 0.56f;                         // not every terrace is flooded
+}
+
+float lakeField(float a, float D) {
+    float sh = oceanShore(a, D);
+    if (sh < 1e8f) return D > sh ? LAKE_T + 0.3f : LAKE_T - 0.4f;     // the sea, or the dry land before it
+    const BiomeParams& b = biomeAt(D);
+    float sc = b.pondScale > 1.f ? b.pondScale : 1.f;                   // gardens: small, frequent ponds
+    int P = (int)(6.f * sc + 0.5f);
+    float l = fbmP(angU(a, P), D * 0.03f * sc, P, 3, 0x1A4Eu);
+    return l - (1.f - b.lakes) * 0.2f;                                  // lake country has lakes; elsewhere ponds are rare
+}
 
 float forestField(float a, float D) {
     float f = fbmP(angU(a, 5), D * 0.02f, 5, 2, 0xF0E5u);
-    f = (f - 0.32f) * 2.8f;
+    const BiomeParams& b = biomeAt(D);
+    f = b.forest + (f - 0.5f) * b.forestVar * 3.f;                      // the biome sets the cover; noise makes it patchy
     return f < 0.f ? 0.f : (f > 1.f ? 1.f : f);
 }
 
@@ -56,6 +82,15 @@ float cloudCover(float D) {
     float c = fbmP(0.f, D * 0.004f, 1, 2, 0xC10Du);
     c = (c - 0.3f) * 2.5f;
     return c < 0.f ? 0.f : (c > 1.f ? 1.f : c);
+}
+
+float streamField(float a, float D) {
+    if (lakeField(a, D) > LAKE_T - 0.02f) return 1.f;                 // lakes take priority
+    float where = fbmP(0.f, D * 0.0035f, 1, 2, 0x5C1u);                 // some stretches have streams
+    if (where < 0.75f - 0.5f * biomeAt(D).creeks) return 1.f;
+    float n = fbmP(angU(a, 3), D * 0.011f, 3, 2, 0x57E4u);              // the 0.5 contour winds across the land
+    float w = fabsf(n - 0.5f) / 0.009f;                                 // a creek, not a river
+    return w < 1.f ? w : 1.f;
 }
 
 BiomeSample sampleWorld(float angle, float D) {

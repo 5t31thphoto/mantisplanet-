@@ -6,6 +6,8 @@
 // plus a wandering soak that reports how a blind walker fares (information only).
 #include "harness_core.inc"
 #include <algorithm>
+#include "../../src/journey.h"
+#include "../../src/fishing.h"
 using namespace mantis;
 
 static int fails = 0;
@@ -88,6 +90,7 @@ int main(int argc, char** argv) {
     bool was = audioMuted();
     hold(5, 0);
     check(audioMuted() == was, "short tap: no change");
+    if (fishingActive()) { hold(5, 0); for (int f = 0; f < 60 && fishingActive(); f++) frame(0.f, 0.f); }   // that tap cast a line (water ahead): put the rod away
     hold(30, 60);
     check(audioMuted() == was, "drag: no change");
     hold(25, 0);
@@ -162,7 +165,68 @@ int main(int argc, char** argv) {
     initControls(); frame(0.f, 0.f);
   }
 
-  // 6. soak
+  // 6. the journey: hold an easterly heading (steering a little as you go) and the garden comes
+  {
+    journeyInit(1234u + seed, 0.f);
+    float D = 0.f; int seen[B_ALL_N] = {0}; int order[12]; int no = 0; uint8_t last = 255;
+    for (int st = 0; st < 60000 && no < 12; st++) {
+      float yaw = 0.25f * sinf(st * 0.01f);                     // weaving around trees, still heading east
+      journeyUpdate(D, yaw, 0.5f); D += 0.5f;
+      uint8_t b = biomeIdAt(D);
+      if (b != last) { order[no++] = b; seen[b]++; last = b; }
+      if (b == B_JAPAN) break;
+    }
+    printf("  (biomes walked east:");
+    for (int i = 0; i < no; i++) printf(" %d", order[i]);
+    printf(")\n");
+    check(seen[B_JAPAN] > 0 && no <= 5, "heading east through three biomes: the Japanese garden");
+    {   // every direction with a special biome brings it
+      const int OCT[7] = {0, 2, 3, 4, 5, 6, 7};
+      const uint8_t SPEC[7] = {B_JAPAN, B_TUNDRA, B_REDWOODS, B_COAST, B_CANYON, B_RAINFOREST, B_KARST};
+      bool all = true;
+      for (int k = 0; k < 7; k++) {
+        journeyInit(777u + seed * 31u + k, 0.f);
+        float Dk = 0.f; bool got = false; int nk = 0; uint8_t lk = 255;
+        for (int st = 0; st < 60000 && !got && nk < 12; st++) {
+          float yaw = OCT[k] * 0.7853982f + 0.25f * sinf(st * 0.01f);
+          journeyUpdate(Dk, yaw, 0.5f); Dk += 0.5f;
+          uint8_t b = biomeIdAt(Dk);
+          if (b != lk) { nk++; lk = b; }
+          if (b == SPEC[k]) got = true;
+        }
+        if (!got || nk > 5) { all = false; printf("  (octant %d did not reach its special)\n", OCT[k]); }
+      }
+      check(all, "all seven special directions arrive after three biomes");
+    }
+    {   // and southwest brings the canyon
+      journeyInit(4321u + seed, 0.f);
+      float D2 = 0.f; bool canyon = false; int n2 = 0; uint8_t l2 = 255;
+      for (int st = 0; st < 60000 && !canyon && n2 < 12; st++) {
+        float yaw = -2.356f + 0.25f * sinf(st * 0.01f);
+        journeyUpdate(D2, yaw, 0.5f); D2 += 0.5f;
+        uint8_t b = biomeIdAt(D2);
+        if (b != l2) { n2++; l2 = b; }
+        if (b == B_CANYON) canyon = true;
+      }
+      check(canyon && n2 <= 5, "heading southwest through three biomes: the red rock canyon");
+      // and the canyon is dry: no lake anywhere in it
+      bool wet = false;
+      for (float d = D2 + 40.f; d < D2 + 640.f; d += 5.f) for (int k = 0; k < 16; k++) if (lakeField(k * 0.3927f, d) > LAKE_T || inStream(k * 0.3927f, d)) wet = true;
+      check(!wet, "the canyon is dry: no lakes, no creeks");
+    }
+    // and turning away resets it: walking a zig-zag never reaches it
+    journeyInit(99u + seed, 0.f);
+    D = 0.f; bool special = false;
+    for (int st = 0; st < 40000; st++) {
+      float yaw = ((st / 2500) & 1) ? 1.6f : -1.6f;            // north, then south, then north...
+      journeyUpdate(D, yaw, 0.5f); D += 0.5f;
+      if (biomeIdAt(D) >= B_ORDINARY_N) special = true;
+    }
+    check(!special, "wandering with no steady heading: no special biome");
+    journeyInit(worldSeed(), totalDistance);
+  }
+
+  // 7. soak
   int frames = (int)(minutes * 60.f * 30.f);
   float worst = 1e9f, wander = 0.f, stuck = 0.f;
   long inside = 0, wet = 0, nan = 0, stops = 0;
@@ -178,7 +242,7 @@ int main(int argc, char** argv) {
     if (std::isnan(totalDistance) || std::isnan(currentYaw)) nan++;
     const FieldObj* o = fieldObjects();
     for (int i = 0; i < FIELD_N; i++) {
-      if (!o[i].solid) continue;
+      if (!o[i].solid || o[i].wet) continue;
       float d = sqrtf(o[i].x * o[i].x + o[i].y * o[i].y) - o[i].radius - BODY_R;
       if (d < worst) worst = d;
       if (d < -0.02f) inside++;

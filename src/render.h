@@ -12,6 +12,7 @@ void renderFrame(float yaw, float distance, float speed, float timeSec);
 
 // Draw the mute / sound-on icon over the finished frame (alpha 0..1 fades it out).
 void renderMuteIcon(bool muted, float alpha);
+void renderFps(int fps);                 // a tiny frame-rate readout in the corner
 
 const uint8_t*  frameBuffer();       // FB_W*FB_H indices
 const uint16_t* framePalette565();   // 256 entries, byte-swapped RGB565 (panel order)

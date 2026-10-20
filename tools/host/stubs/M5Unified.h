@@ -31,7 +31,9 @@ struct HostImu {
   ImuData getImuData() { return data; }
 };
 struct HostPower { int last = 0; long changes = 0; void setVibration(int v) { if (v != last) changes++; last = v; } };
+struct HostSpkCfg { uint8_t task_priority = 2; uint8_t task_pinned_core = 255; size_t dma_buf_len = 256; size_t dma_buf_count = 8; };
 struct HostSpeaker {
+  HostSpkCfg cfg; HostSpkCfg config() const { return cfg; } void config(const HostSpkCfg& c) { cfg = c; }
   bool en = false; long blocks = 0;
   bool isEnabled() { return en; } bool begin() { en = true; return true; } void end() { en = false; }
   void setVolume(int) {} size_t isPlaying(int) { return 0; }
@@ -45,9 +47,12 @@ struct HostTouch {
   bool down = false, prev = false; int x = 160, y = 120;
   TouchDetail getDetail() { TouchDetail d; d.x = x; d.y = y; d.pressed = down; d.was = down && !prev; d.rel = !down && prev; return d; }
 };
+struct HostRtcDT { struct { int year = 2026, month = 10, date = 19; } date; struct { int hours = 18, minutes = 40; } time; };
+struct HostRtc { HostRtcDT getDateTime() { return HostRtcDT(); } };
+struct HostBtn { bool wasPressed() { return false; } };
 struct HostCfg { bool output_power = false, internal_imu = false, internal_mic = false, internal_spk = false; };
 struct M5Class {
-  HostDisplay Display; HostImu Imu; HostPower Power; HostSpeaker Speaker; HostTouch Touch;
+  HostDisplay Display; HostImu Imu; HostPower Power; HostSpeaker Speaker; HostTouch Touch; HostBtn BtnA, BtnB, BtnC; HostRtc Rtc;
   HostCfg config() { return {}; }
   void begin(HostCfg) {}
   void update() { Touch.prev = touchLatch; touchLatch = Touch.down; }

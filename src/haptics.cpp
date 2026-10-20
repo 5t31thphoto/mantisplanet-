@@ -20,8 +20,12 @@ static const Key G_SWELL[]  = {{20, 500}, {85, 900}, {30, 900}, {0, 900}};
 static const Key G_LUBDUB[] = {{175, 45}, {30, 90}, {125, 40}, {0, 220}};
 static const Key G_MUTE[]   = {{120, 30}, {0, 70}, {120, 30}, {0, 40}};
 static const Key G_UNMUTE[] = {{40, 60}, {150, 50}, {0, 60}};
-static const Key* const STEP[] = {G_GRASS, G_FOREST, G_STONE, G_MUD, G_WET};
-static const int STEP_N[] = {3, 4, 2, 4, 3};
+static const Key G_SPLASH[] = {{60, 25}, {85, 30}, {40, 40}, {0, 60}};             // wading
+static const Key G_SNOW[]   = {{40, 25}, {70, 30}, {35, 35}, {0, 50}};             // crunch
+static const Key G_SAND[]   = {{40, 25}, {55, 30}, {0, 45}};
+static const Key G_ICE[]    = {{90, 15}, {0, 40}};
+static const Key* const STEP[] = {G_GRASS, G_FOREST, G_STONE, G_MUD, G_WET, G_SPLASH, G_SNOW, G_SAND, G_ICE};
+static const int STEP_N[] = {3, 4, 2, 4, 3, 4, 4, 3, 2};
 
 struct Gesture { const Key* k; int n, i; uint32_t t0; uint8_t from; float scale; bool on; };
 static Gesture s_g[3];            // a few gestures can overlap (a footstep over a thunder roll)
@@ -55,7 +59,7 @@ static void tap(uint8_t level, uint16_t ms) {
 
 void begin() { s_now = 255; vib(0); for (Gesture& g : s_g) g.on = false; }
 void footstep(uint8_t surface, float strength) {
-    if (surface > 4) surface = 0;
+    if (surface > 8) surface = 0;
     gesture(STEP[surface], STEP_N[surface], 0.6f + 0.5f * strength);
 }
 void bump() { gesture(G_BUMP, 4, 1.f); }
@@ -74,6 +78,19 @@ void rain(float amount) {
 }
 void wind(float storm, float gust) { s_rumT = storm * gust * 0.35f; s_rumRate = 3.f + gust * 5.f; s_rumGrit = 0.6f; }
 
+static float s_fishT = 0.f, s_fishRisk = 0.f;
+static bool s_fishOn = false;
+static const Key G_BITE[]    = {{200, 30}, {200, 160}, {90, 80}, {0, 60}};
+static const Key G_HOOKSET[] = {{255, 20}, {255, 70}, {0, 50}};
+static const Key G_SNAP[]    = {{255, 10}, {255, 40}, {0, 30}, {120, 20}, {0, 120}};
+static const Key G_KICK[]    = {{170, 15}, {170, 35}, {40, 40}, {150, 15}, {150, 30}, {0, 60}};   // a double pulse
+void fishTick(float level) { tap((uint8_t)(70 + 80 * level), 30); }
+void fishBite() { gesture(G_BITE, 4, 1.f); }
+void fishHookSet() { gesture(G_HOOKSET, 3, 1.f); }
+void fishKick(float strength) { gesture(G_KICK, 6, 0.4f + 0.6f * strength); }
+void fishSnap() { gesture(G_SNAP, 5, 1.f); }
+void fishTension(float tension, float risk, bool on) { s_fishT = tension; s_fishRisk = risk; s_fishOn = on; }
+
 void update(float dt) {
     uint32_t now = millis();
     if (s_thunderPending && now >= s_thunderAt) { gesture(G_THUNDER, 7, 0.35f + 0.65f * s_thunderPow * (0.5f + 0.5f * s_thunderClose)); s_thunderPending = false; }
@@ -86,6 +103,12 @@ void update(float dt) {
         if (now >= s_rumJitAt) { s_rumJit = (esp_random() & 255) / 255.f; s_rumJitAt = now + 40; }
         float p = 0.5f + 0.5f * sinf(s_rumPh * 6.2831853f);
         out = fmaxf(out, s_rum * (0.6f + 0.4f * p) * (1.f - s_rumGrit * 0.5f + s_rumGrit * s_rumJit));
+    }
+    if (s_fishOn) {                                       // the line: a steady pull you can feel
+        float line = 0.15f + 0.55f * fminf(1.f, s_fishT);
+        if (s_fishRisk > 0.3f) line = ((now / 45) & 1) ? fminf(1.f, line + 0.35f) : 0.05f;   // about to go: a rapid stutter
+        if (s_fishT < 0.12f) line = 0.f;                 // slack: nothing in your hands
+        out = fmaxf(out, line);
     }
     for (Gesture& g : s_g) {
         if (!g.on) continue;

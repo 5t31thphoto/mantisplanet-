@@ -27,7 +27,6 @@ static V3 s_up = {0, 0, 1};          // gravity direction in the device frame (a
 static V3 s_bias = {0, 0, 0};        // gyro bias, deg/s
 static V3 s_aLP = {0, 0, 1};         // smoothed accelerometer for the throttle
 static bool s_init = false;
-static float s_neutralPitch = 0.f;
 static uint32_t s_lastImuUs = 0;
 static float s_yaw = 0.f, s_rate = 0.f, s_rateSm = 0.f;
 static float s_stillT = 0.f, s_learnT = 0.f;
@@ -35,6 +34,8 @@ static float s_mean = 0.f, s_act = 0.f, s_handT = 0.f;   // hand-held bias track
 static V3 s_wPrev = {0, 0, 0};
 static float s_jit = 1.f;                                 // sample-to-sample gyro jitter: hands tremble, tables don't
 static uint32_t s_savedAt = 0;
+static float s_fwdSign = 1.f, s_fwdLearn = 0.f;   // which way is forward: learned from how you tip to walk
+static float s_pitchDeg = 0.f, s_flickDps = 0.f;
 static float forwardSpeed = 0.f;
 static bool s_trying = false;
 
@@ -43,8 +44,15 @@ static void loadBias() {
     Preferences p;
     if (p.begin("mantisplanet", true)) {
         s_bias = v3(p.getFloat("gbx", 0.f), p.getFloat("gby", 0.f), p.getFloat("gbz", 0.f));
+        s_fwdSign = p.getFloat("fwd", 1.f) < 0.f ? -1.f : 1.f;
         p.end();
     }
+#endif
+}
+static void saveFwd() {
+#ifndef HOST
+    Preferences p;
+    if (p.begin("mantisplanet", false)) { p.putFloat("fwd", s_fwdSign); p.end(); }
 #endif
 }
 static void saveBias() {
@@ -56,6 +64,8 @@ static void saveBias() {
 
 void setYaw(float yaw) { s_yaw = yaw; s_rate = s_rateSm = 0.f; }
 float controlsYawRate() { return s_rateSm * DEG2RAD; }
+float controlsPitchDeg() { return s_pitchDeg; }
+float controlsFlickDps() { return s_flickDps; }
 
 void initControls() {
     s_init = false;
@@ -85,7 +95,8 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
         V3 w = v3(d.gyro.x, d.gyro.y, d.gyro.z);               // deg/s
         float an = len(a);
         V3 an1 = an > 0.2f ? sc(a, 1.f / an) : s_up;
-        if (!s_init) { s_up = an1; s_aLP = an1; s_neutralPitch = atan2f(an1.z, an1.y); s_init = true; }
+        if (!s_init) { s_up = an1; s_aLP = an1; s_init = true; }
+        s_flickDps = fabsf(d.gyro.x - s_bias.x);                   // a flick of the top toward you or away
         V3 wc = sub(w, s_bias);
 
         // Gravity in the device frame: carried along by the gyro (instant), pulled gently toward the
@@ -106,7 +117,8 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
             float k = fminf(1.f, dt * 0.7f);
             s_bias = v3(s_bias.x + (w.x - s_bias.x) * k, s_bias.y + (w.y - s_bias.y) * k, s_bias.z + (w.z - s_bias.z) * k);
             s_learnT += dt;
-            if (s_learnT > 6.f && millis() - s_savedAt > 120000u) { saveBias(); s_savedAt = millis(); s_learnT = 0.f; }
+            // flash writes pause both cores (a click in the audio): save once when learned, then at most every 30 min
+            if (s_learnT > 6.f && (s_savedAt == 0 || millis() - s_savedAt > 1800000u)) { saveBias(); s_savedAt = millis() | 1u; s_learnT = 0.f; }
         }
         // In the hand it's never truly still, but tremor averages to zero over a couple of seconds and
         // bias doesn't. When the vertical rate has averaged under 1 deg/s with only tremor-sized jitter,
@@ -127,13 +139,15 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
 
         // Throttle: tip forward relative to how you held it at the start.
         s_aLP = norm(v3(s_aLP.x + (an1.x - s_aLP.x) * 0.35f, s_aLP.y + (an1.y - s_aLP.y) * 0.35f, s_aLP.z + (an1.z - s_aLP.z) * 0.35f));
-        // Throttle: the tip angle in the forward/back plane, relative to how you held it at the start.
-        // Either way past ~5 deg walks (further = faster); level stops. Roll doesn't count.
-        float pa = atan2f(s_aLP.z, s_aLP.y) - s_neutralPitch;
-        while (pa > 3.14159265f) pa -= 6.2831853f;
-        while (pa < -3.14159265f) pa += 6.2831853f;
-        float tipDeg = fabsf(pa) * 57.29578f;
-        float targetSpeed = tipDeg > 5.f ? (tipDeg - 5.f) / 25.f : 0.f;
+        // Throttle: held upright like a window you stand; tip the top away past ~20 deg and you walk,
+        // further = faster. Laid nearly flat (on a table) you stand again.
+        float tilt = asinf(fminf(1.f, fabsf(s_aLP.z))) * 57.29578f;       // screen angle from vertical
+        float targetSpeed = (tilt > 20.f && tilt < 72.f) ? (tilt - 20.f) / 25.f : 0.f;
+        if (targetSpeed > 0.3f) {                                   // learn which way is forward from walking
+            s_fwdLearn += dt;
+            if (s_fwdLearn > 1.5f) { float sg = s_aLP.z >= 0.f ? 1.f : -1.f; if (sg != s_fwdSign) { s_fwdSign = sg; saveFwd(); } s_fwdLearn = -1e9f; }
+        }
+        s_pitchDeg = asinf(fmaxf(-1.f, fminf(1.f, s_aLP.z * s_fwdSign))) * 57.29578f;   // + forward, - back
         if (targetSpeed > 1.1f) targetSpeed = 1.1f;
         s_trying = targetSpeed > 0.02f;
         forwardSpeed = forwardSpeed * 0.86f + targetSpeed * 0.14f;

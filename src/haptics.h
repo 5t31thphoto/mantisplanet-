@@ -18,5 +18,11 @@ void heartbeat();                                 // lub-dub (the dream begins)
 void confirmMute(bool muted);                     // two soft taps = sound off, a rising tap = sound on
 void rain(float amount);                          // patter on your hands, per frame
 void wind(float storm, float gust);               // a faint rumble only in a storm
+void fishTick(float level);                       // a nibble at the bobber
+void fishBite();                                  // the bobber goes under
+void fishHookSet();                               // the hook bites home
+void fishKick(float strength);                    // the fish shakes its head / kicks
+void fishSnap();                                  // the line breaks
+void fishTension(float tension, float breakRisk, bool on);   // the line, held: rumble with tension, stutter near breaking
 void update(float dt);
 }

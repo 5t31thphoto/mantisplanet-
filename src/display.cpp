@@ -2,6 +2,10 @@
 #include "render.h"
 #include <M5Unified.h>
 #include <string.h>
+#include <stdlib.h>
+#ifndef HOST
+#include <esp_heap_caps.h>
+#endif
 
 namespace mantis {
 
@@ -14,6 +18,50 @@ static bool s_double = false;
 static TaskHandle_t s_dispTask = nullptr;
 static SemaphoreHandle_t s_dispIdle = nullptr;
 static volatile int s_pushIdx = 0;
+static uint16_t* s_ov = nullptr;
+static bool s_ovOn = false;
+static uint8_t s_ovRow[DH];
+static inline uint16_t swap16(uint16_t v) { return (uint16_t)((v >> 8) | (v << 8)); }
+
+uint16_t* overlayBuffer() {
+    if (!s_ov) {
+#ifdef HOST
+        s_ov = (uint16_t*)calloc(DW * DH, sizeof(uint16_t));
+#else
+        s_ov = (uint16_t*)heap_caps_calloc(DW * DH, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+        if (!s_ov) s_ov = (uint16_t*)calloc(DW * DH, sizeof(uint16_t));
+#endif
+    }
+    return s_ov;
+}
+void overlayClear() { if (overlayBuffer()) memset(s_ov, 0, DW * DH * sizeof(uint16_t)); }
+void overlayEnable(bool on) {
+    s_ovOn = on && overlayBuffer();
+    if (!s_ovOn) return;
+    for (int y = 0; y < DH; y++) { s_ovRow[y] = 0; for (int x = 0; x < DW; x++) if (s_ov[y * DW + x]) { s_ovRow[y] = 1; break; } }
+}
+bool overlayEnabled() { return s_ovOn; }
+
+void compositeRow(int y, uint16_t* out) {
+    const uint8_t* fb = frameBuffer();
+    const uint16_t* pal = framePalette565();
+    int src = (y + frameBob()) >> 1;
+    if (src > FB_H - 1) src = FB_H - 1;
+    const uint8_t* srow = fb + src * FB_W;
+    for (int x = 0; x < DW; x++) out[x] = swap16(pal[srow[x >> 1]]);
+    if (s_ovOn && s_ovRow[y]) { const uint16_t* o = s_ov + y * DW; for (int x = 0; x < DW; x++) if (o[x]) out[x] = o[x]; }
+}
+
+void displayHoldBus() {
+#ifndef HOST
+    if (s_double) while (xSemaphoreTake(s_dispIdle, 0) != pdTRUE) vTaskDelay(1);
+#endif
+}
+void displayReleaseBus() {
+#ifndef HOST
+    if (s_double) xSemaphoreGive(s_dispIdle);
+#endif
+}
 
 static void displayTask(void*) {
     for (;;) {
@@ -54,6 +102,14 @@ static void expand(M5Canvas* c) {
             d[2 * x + 1] = v;
         }
         prevSrc = src;
+    }
+    if (s_ovOn) {                                       // the overlay at full resolution
+        for (int y = 0; y < DH; y++) {
+            if (!s_ovRow[y]) continue;
+            const uint16_t* o = s_ov + y * DW;
+            uint16_t* d = dst + y * DW;
+            for (int x = 0; x < DW; x++) if (o[x]) d[x] = swap16(o[x]);
+        }
     }
 }
 

@@ -10,7 +10,7 @@
 namespace mantis {
 
 enum ObjType : uint8_t {
-    OBJ_NONE, OBJ_PINE, OBJ_BROAD, OBJ_BUSH, OBJ_FLOWERS, OBJ_TUFT, OBJ_BOULDER, OBJ_OUTCROP
+    OBJ_NONE, OBJ_PINE, OBJ_BROAD, OBJ_BUSH, OBJ_FLOWERS, OBJ_TUFT, OBJ_BOULDER, OBJ_OUTCROP, OBJ_REEDS, OBJ_LANTERN, OBJ_BAMBOO, OBJ_TORII, OBJ_SAGUARO, OBJ_PEAR, OBJ_LOG, OBJ_TUNNELTREE, OBJ_HOLLOWLOG, OBJ_BIGLEAF
 };
 
 struct FieldObj {
@@ -20,17 +20,26 @@ struct FieldObj {
     uint32_t seed;
     uint8_t type;
     bool solid;
+    uint8_t var;       // outcrops: 1 waterfall, 2 ruin walls, 4 mesa, 8 hoodoo, 16 arch, 32 sea stack, 64 karst pillar; trees: 3 cherry, 4 maple, 5 black pine, 6 redwood, 7 rainforest giant
+    bool wet;          // drifted into water: hidden and walk-through until it's dry again
 };
 
+enum : uint8_t { CR_DEER, CR_RABBIT, CR_BIRDS, CR_BUTTERFLY, CR_DUCK, CR_BEAVER, CR_SQUIRREL, CR_KOI, CR_LIZARD, CR_KINDS };
 struct FieldCritter {
     bool on;
-    uint8_t kind;      // 0 deer, 1 rabbit, 2 birds
-    float x, y;
+    uint8_t kind;
+    float x, y, h;     // position in the local plane; height above ground (butterflies, ducks taking off, squirrels climbing)
     float t0, idleT;
     int dir;           // flee direction: +1 / -1 across the line of sight
     bool faceRight;
     bool fleeing;
+    float tx, ty;      // a target: the water for a beaver, the tree for a squirrel
+    float fleeT;       // seconds since it started fleeing
+    uint32_t seed;
+    float splashT;     // beaver: time of the plunge (for the ring on the water)
+    uint8_t variant;   // 1: the north / marsh version; 2: the garden's; 3: the canyon's (mule deer, jackrabbit, roadrunner)
 };
+constexpr int CRIT_N = 6;
 
 struct Firefly { float x, y, h, ph, drift; };
 constexpr int FIREFLY_N = 40;
@@ -47,12 +56,14 @@ void fieldInit(float yaw, float distance);
 float fieldStep(float yaw, float ds, float distance, bool* bumped);
 
 // Encounters (critters) and their timing. Standing still invites them closer; walking spooks them.
-// Returns true on the frame a critter bolts (for its sound and the motor).
-bool fieldTick(float yaw, float distance, float timeSec, float dt, float speed, float stillFor);
+// Returns how many critters bolted this frame; fieldBolt(i) says which kind and how far (for sound and motor).
+int fieldTick(float yaw, float distance, float timeSec, float dt, float speed, float stillFor);
+void fieldBolt(int i, uint8_t& kind, float& dist);
 
 const FieldObj*     fieldObjects();
-const FieldCritter& fieldCritter();
+const FieldCritter* fieldCritters();     // CRIT_N slots
 const Firefly*      fieldFireflies();
 float               rockFieldAt(float angle, float D);
+float               fieldNearestFalls();      // metres to the nearest waterfall (999 if none)
 
 }

@@ -1,6 +1,8 @@
 #include "scene.h"
 #include "universe.h"
 #include "audio.h"
+#include "field.h"
+#include "journey.h"
 #include <math.h>
 
 namespace mantis {
@@ -32,6 +34,8 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     float clock = dayClock(t, distance);
     s.tod = clock - floorf(clock);
     s.sunElev = sunElevation(s.tod);
+    s.sunAz = -(s.tod - 0.245f) * kTau;                       // east at sunrise, south at noon, west at sunset
+    const BiomeParams& here = biomeAt(distance);
     s.daySeed = hash32((uint32_t)floorf(clock) ^ worldSeed());
 
     // ---------- you ----------
@@ -44,16 +48,16 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
 
     // ---------- weather: a slow field over distance walked and time ----------
     float u = distance * 0.0016f + t * 0.0011f;
-    float v = clampf((fbmP(0.f, u, 1, 3, 0x7EA7u) - 0.28f) / 0.46f, 0.f, 1.f);
+    float v = clampf((fbmP(0.f, u, 1, 3, 0x7EA7u) - 0.28f) / 0.46f + here.wet, 0.f, 1.f);
     float cloudT = clampf(0.12f + v * 1.05f, 0.f, 1.f);
     if (t < 300.f) cloudT = fminf(cloudT, 0.45f + 0.55f * smoothstep(150.f, 300.f, t));
     float settle = smoothstep(150.f, 300.f, t);             // the dream always begins in fair weather
     float rainT = smoothstep(0.62f, 0.78f, v) * settle;
     float stormT = smoothstep(0.84f, 0.97f, v) * settle;
-    float windT = 0.16f + 0.34f * fbmP(0.f, u * 3.f + 5.f, 1, 2, 0x3C1Du) + rainT * 0.2f + stormT * 0.5f;
+    float windT = 0.16f + 0.34f * fbmP(0.f, u * 3.f + 5.f, 1, 2, 0x3C1Du) + rainT * 0.2f + stormT * 0.5f + here.wind;
     float dawn = bump(s.tod, 0.17f, 0.24f, 0.33f, 0.42f);
     float humid = fbmP(0.f, u * 2.f + 11.f, 1, 2, 0x6F06u);
-    float fogT = dawn * (0.35f + 0.9f * humid) + rainT * 0.25f + stormT * 0.15f;
+    float fogT = dawn * (0.35f + 0.9f * humid) + rainT * 0.25f + stormT * 0.15f + here.mist;
     if (g_force.cloud >= 0) cloudT = g_force.cloud;
     if (g_force.rain >= 0) rainT = g_force.rain;
     if (g_force.storm >= 0) stormT = g_force.storm;
@@ -107,8 +111,22 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     s.lakeNear = follow(s.lakeNear, lake, dt, 1.f);
     s.rockNear = follow(s.rockNear, rockFieldAt(yaw, distance + 2.f), dt, 1.5f);
     s.open = 1.f - s.forestNear;
+    float sn = 0.f;
+    for (int k = -2; k <= 2; k++) for (float z = 0.5f; z < 9.f; z += 2.f) { float f = 1.f - streamField(yaw + k * 0.5f, distance + z); if (f > 0.f) sn = fmaxf(sn, 1.f - z / 10.f); }
+    s.streamNear = follow(s.streamNear, sn, dt, 1.f);
+    float fd = fieldNearestFalls();
+    s.fallsNear = follow(s.fallsNear, fd < 60.f ? 1.f / (1.f + fd / 7.f) : 0.f, dt, 1.f);
+    bool wading = inStream(yaw, distance + 0.4f) || paddyAt(yaw, distance + 0.4f);
+    bool onIce = biomeAt(distance).snow > 0.5f && lakeField(yaw, distance + 0.4f) > LAKE_T;
     bool shore = lakeField(yaw, distance + 2.5f) > LAKE_T - 0.05f;
-    s.surface = shore ? SURF_MUD : s.rockNear > 0.65f ? SURF_STONE : s.forestNear > 0.5f ? SURF_FOREST : s.wet > 0.45f ? SURF_WET : SURF_GRASS;
+    s.snowy = here.snow; s.frogBoost = here.frogs; s.cuckoo = here.cuckoo; s.crows = here.crows; s.japan = here.japan; s.desert = here.desert; s.hush = here.hush; s.giant = here.giant; s.karst = here.karst; s.tundra = here.tundra; s.tropical = here.tropical;
+    float near = 1e9f;
+    if (here.ocean > 0.5f) for (int k = -3; k <= 3; k++) { float sh = oceanShore(yaw + k * 0.4f, distance); if (sh < 1e8f) near = fminf(near, fmaxf(0.f, sh - distance)); }
+    s.oceanNear = follow(s.oceanNear, near < 1e8f ? clampf(1.f - near / 140.f, 0.f, 1.f) : 0.f, dt, 1.f);
+    static float lastTod = 0.f;                                  // the temple bell rings once as the sun goes down
+    if (s.japan > 0.5f && lastTod < 0.715f && s.tod >= 0.715f) sfxMoment(MOMENT_TEMPLE);
+    lastTod = s.tod;
+    s.surface = onIce ? SURF_ICE : wading ? SURF_SPLASH : here.snow > 0.5f ? SURF_SNOW : (here.desert > 0.5f || s.oceanNear > 0.75f) ? SURF_SAND : shore ? SURF_MUD : s.rockNear > 0.65f ? SURF_STONE : s.forestNear > 0.5f ? SURF_FOREST : s.wet > 0.45f ? SURF_WET : SURF_GRASS;
 
     // ---------- moments ----------
     uint32_t ds = s.daySeed;
@@ -128,12 +146,14 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     if (prevM < 0.25f && s.murmur >= 0.25f) sfxMoment(MOMENT_MURMUR);
 
     float ffT = (bump(s.tod, 0.73f, 0.78f, 0.97f, 1.01f) + bump(s.tod, -0.1f, -0.05f, 0.04f, 0.09f)) * (1.f - s.rain) * (1.f - s.storm) * (0.35f + 0.65f * clampf(1.f - fabsf(s.forestNear - 0.45f) * 2.f, 0.f, 1.f));
+    ffT *= 1.f - biomeAt(distance).desert;                    // no fireflies in the desert
     if (g_force.fireflies >= 0) ffT = g_force.fireflies;
     s.fireflies = follow(s.fireflies, ffT, dt, 3.f);
 
     bool night = s.tod > 0.86f || s.tod < 0.15f;
     float nightK = night ? clampf(fminf(fabsf(s.tod - 0.86f), fabsf(s.tod - 0.15f)) * 20.f, 0.f, 1.f) : 0.f;
-    float auT = ((ds >> 3) % 10u < 3u ? 1.f : 0.f) * nightK * clampf(1.f - (s.cloud - 0.4f) * 3.f, 0.f, 1.f);
+    float auB = biomeAt(distance).auroraBoost;                 // the far north: aurora most nights
+    float auT = ((ds >> 3) % 10u < (uint32_t)(3 + 5 * auB) ? 1.f : 0.f) * nightK * clampf(1.f - (s.cloud - 0.4f) * 3.f, 0.f, 1.f);
     if (g_force.aurora >= 0) auT = g_force.aurora;
     float prevA = s.aurora;
     s.aurora = follow(s.aurora, auT, dt, 6.f);

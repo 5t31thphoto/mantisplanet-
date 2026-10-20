@@ -13,7 +13,7 @@ static inline float smooth(float a, float b, float x) { float t = clampf((x - a)
 
 // ---------------- harmony ----------------
 struct Chord { int8_t n[4]; int8_t root; };
-enum : uint8_t { MOOD_DAWN, MOOD_DAY, MOOD_GOLD, MOOD_NIGHT, MOOD_STORM, MOOD_N };
+enum : uint8_t { MOOD_DAWN, MOOD_DAY, MOOD_GOLD, MOOD_NIGHT, MOOD_STORM, MOOD_JAPAN, MOOD_CANYON, MOOD_KARST, MOOD_N };
 static const Chord CHORDS[MOOD_N][4] = {
     // dawn: D lydian, open and lifting
     {{{54, 57, 61, 64}, 38}, {{56, 59, 64, 66}, 38}, {{54, 57, 59, 62}, 35}, {{52, 57, 59, 64}, 33}},
@@ -25,10 +25,16 @@ static const Chord CHORDS[MOOD_N][4] = {
     {{{53, 57, 62, 64}, 38}, {{51, 55, 58, 62}, 39}, {{53, 57, 58, 62}, 34}, {{55, 60, 62, 64}, 33}},
     // storm: pedal and shadow
     {{{50, 57, 62, 65}, 38}, {{50, 58, 62, 65}, 34}, {{50, 57, 62, 65}, 38}, {{50, 57, 60, 65}, 36}},
+    // the garden: open fifths and the in scale (D Eb G A Bb)
+    {{{50, 57, 62, 67}, 38}, {{51, 58, 62, 67}, 39}, {{50, 55, 62, 69}, 38}, {{46, 53, 58, 62}, 34}},
+    // the canyon: wide open fifths over a D pedal, a flattened seventh for the dusk
+    {{{50, 57, 62, 64}, 38}, {{48, 55, 62, 64}, 36}, {{50, 55, 60, 62}, 38}, {{45, 52, 57, 60}, 33}},
+    // karst: the gong scale, open and floating
+    {{{50, 57, 62, 66}, 38}, {{47, 54, 59, 62}, 35}, {{52, 59, 62, 66}, 40}, {{45, 52, 57, 64}, 33}},
 };
 static const int8_t PENTA[MOOD_N][7] = {
     {62, 64, 66, 69, 71, 74, 76}, {62, 65, 67, 69, 72, 74, 77}, {62, 65, 67, 69, 72, 74, 77},
-    {62, 64, 65, 69, 70, 74, 76}, {62, 65, 69, 70, 74, 77, 81}};
+    {62, 64, 65, 69, 70, 74, 76}, {62, 65, 69, 70, 74, 77, 81}, {62, 63, 67, 69, 70, 74, 75}, {62, 65, 67, 69, 72, 74, 76}, {62, 64, 66, 69, 71, 74, 76}};
 
 static uint8_t s_mood = MOOD_GOLD;
 static int s_chordI = 0;
@@ -109,6 +115,9 @@ static void pickMood(const Scene& s) {
     float tod = s.tod;
     uint8_t m;
     if (s.storm > 0.4f || s.rain > 0.7f) m = MOOD_STORM;
+    else if (s.japan > 0.5f) m = MOOD_JAPAN;
+    else if (s.desert > 0.5f) m = MOOD_CANYON;
+    else if (s.karst > 0.5f) m = MOOD_KARST;
     else if (tod > 0.84f || tod < 0.17f) m = MOOD_NIGHT;
     else if (tod < 0.33f) m = MOOD_DAWN;
     else if (tod < 0.62f) m = MOOD_DAY;
@@ -143,6 +152,7 @@ void musicMoment(uint8_t kind) {
         case MOMENT_MURMUR:  s_aweBoost = 0.8f; break;
         case MOMENT_AURORA:  bell(root * 0.75f, 0.45f); s_aweBoost = 1.f; break;
         case MOMENT_GOLDEN:  bell(root, 0.35f); s_aweBoost = 0.6f; break;
+        case MOMENT_TEMPLE:  bell(dsp::midiHz(43), 0.9f); bell(dsp::midiHz(55), 0.4f); s_aweBoost = 0.7f; break;   // the temple bell
     }
 }
 
@@ -212,6 +222,7 @@ static void conduct(const Scene& s, float dt) {
     float e = walk * (1.f - s.rain * 0.6f) * (1.f - s.storm * 0.9f);
     bool night = s.tod > 0.84f || s.tod < 0.17f;
     if (night) e = fminf(e, 0.5f);
+    e *= 1.f - 0.5f * s.hush;                               // the giants ask for quiet
     if (s.t < 30.f) e = 0.f;
     if (s.stillFor > 3.f) e = 0.f;
     s_energy += (e - s_energy) * clampf(dt / (e > s_energy ? 10.f : 6.f), 0.f, 1.f);
@@ -252,7 +263,7 @@ static void conduct(const Scene& s, float dt) {
     ease(g_hat, (s_stage & V_HAT) ? fg * 0.8f : 0.f, 4.f);
     ease(g_bass, (s_stage & V_BASS) ? fg : 0.f, 4.f);
     ease(g_kick, ((s_stage & V_BASS) && !night && E > 0.75f) ? fg : 0.f, 4.f);
-    ease(g_pluck, (s_stage & V_PLUCK) ? fg * 0.8f : (song ? 0.f : 0.25f * s_awe), 5.f);
+    ease(g_pluck, (s_stage & V_PLUCK) ? fg * 0.8f : (song ? 0.f : 0.25f * s_awe + 0.3f * fmaxf(s.japan, s.karst)), 5.f);   // a koto phrase now and then in the garden
     ease(g_choir, smooth(0.4f, 0.9f, s_awe), 8.f);
     s_lastNight = night ? 1.f : 0.f;
 }

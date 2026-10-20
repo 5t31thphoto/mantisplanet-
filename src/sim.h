@@ -9,5 +9,7 @@ namespace mantis {
 void initControls();
 void setYaw(float yaw);          // previews / tests
 void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying);
-float controlsYawRate();         // rad/s, for the near-field pivot and tests
+float controlsYawRate();
+float controlsPitchDeg();     // signed tilt from upright: + tipped forward, - tipped back
+float controlsFlickDps();     // how fast the device is pitching right now (a flick)         // rad/s, for the near-field pivot and tests
 }
