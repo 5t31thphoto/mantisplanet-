@@ -10,6 +10,7 @@
 #include "scene.h"
 #include "audio.h"
 #include "journey.h"
+#include "mem.h"
 #include "fishing.h"
 #include "bugs.h"
 #include <math.h>
@@ -1818,7 +1819,9 @@ static void drawTunnelTree(float sx, float baseY, float s, float hgt, float radi
     int tw = clampi((int)(radius * s), 2, 140);
     int top = by - (int)(hgt * s);
     // draw the trunk, then carve the opening so the forest beyond shows through
-    static uint8_t keep[W * H];
+    static uint8_t* keep = nullptr;                                     // runtime buffer (PSRAM): too big for static RAM
+    if (!keep) keep = (uint8_t*)memSlow(W * H);
+    if (!keep) return;
     int hw = (int)(tw * 0.42f), hh = (int)(radius * 1.15f * s);
     int x0 = clampi(cx - hw, 0, W - 1), x1 = clampi(cx + hw, 0, W - 1), y0 = clampi(by - hh, 0, H - 1), y1 = clampi(by, 0, H - 1);
     for (int y = y0; y <= y1; y++) memcpy(keep + y * W + x0, fb + y * W + x0, x1 - x0 + 1);

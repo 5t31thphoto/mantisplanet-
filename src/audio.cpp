@@ -117,18 +117,12 @@ static void audioTask(void*) {
 }
 #endif
 
-void audioBegin() {
-    dsp::init();
-    rng.s = 0x2545F491u;
-    s_rev.begin();
-    s_dly.begin(12000);
-    natureInit();
-    musicInit();
+// Call right after M5.begin(), before anything else allocates: the speaker driver's DMA buffers must come
+// from internal RAM. The driver runs its own task that feeds the I2S DMA. By default it shares a priority
+// with the LCD push (which keeps core 0 busy for most of each frame) and its DMA cushion is short, so it can
+// run dry: a stutter even when the frame rate is fine. Top priority and ~85 ms of DMA ride out any hiccup.
+void audioSpeakerBegin() {
 #ifndef HOST
-    // The speaker driver runs its own task that feeds the I2S DMA. By default it shares a priority with the
-    // LCD push (which keeps core 0 busy for most of each frame), and its DMA cushion is short, so it can run
-    // dry: a stutter even when the frame rate is fine. Give it top priority and ~85 ms of DMA to ride out
-    // any hiccup (flash writes, a slow frame). Nothing about the sound itself changes.
     if (M5.Speaker.isEnabled()) M5.Speaker.end();
     auto sc = M5.Speaker.config();
     sc.task_priority = 5;
@@ -137,6 +131,20 @@ void audioBegin() {
     M5.Speaker.config(sc);
     M5.Speaker.begin();
     M5.Speaker.setVolume(165);
+#endif
+}
+
+void audioBegin() {
+#ifndef HOST
+    if (!M5.Speaker.isEnabled()) audioSpeakerBegin();
+#endif
+    dsp::init();
+    rng.s = 0x2545F491u;
+    s_rev.begin();
+    s_dly.begin(12000);
+    natureInit();
+    musicInit();
+#ifndef HOST
     xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 4, nullptr, 0);   // above the LCD push (2), below the driver (5)
 #endif
 }

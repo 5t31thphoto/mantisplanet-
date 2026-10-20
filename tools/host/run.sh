@@ -1,4 +1,6 @@
 #!/bin/sh
+# static RAM budget first: the ESP32 linker overflows if big buffers are static
+"$(dirname "$0")/ramcheck.sh" || exit 1
 # fishing: the fight's balance per tier and play style (fast), then the flow end to end
 g++ -std=gnu++11 -O2 -DHOST -I"$(dirname "$0")/stubs" -I"$(dirname "$0")/../../src" "$(dirname "$0")/fishsim.cpp" "$(dirname "$0")/../../src/fishing.cpp" "$(dirname "$0")/../../src/fishgen.cpp" "$(dirname "$0")/../../src/bugs.cpp" "$(dirname "$0")/../../src/universe.cpp" "$(dirname "$0")/../../src/journey.cpp" -o /tmp/fishsim && /tmp/fishsim || exit 1
 # the locked .mg image format, byte for byte

@@ -16,6 +16,7 @@ void sfxFish(uint8_t kind, float arg);
 enum : uint8_t { MOMENT_INTRO, MOMENT_RAINBOW, MOMENT_MURMUR, MOMENT_AURORA, MOMENT_GOLDEN, MOMENT_TEMPLE };
 enum : uint8_t { CRIT_DEER, CRIT_RABBIT, CRIT_BIRDS, CRIT_BUTTERFLY, CRIT_DUCK, CRIT_BEAVER, CRIT_SQUIRREL, CRIT_SPLASH, CRIT_HERON };
 
+void audioSpeakerBegin();   // right after M5.begin(), before other allocations
 void audioBegin();
 
 // game -> audio (lock-free, safe from the main loop)

@@ -1,6 +1,7 @@
 #include "storage.h"
 #include "display.h"
 #include "mgimage.h"
+#include "mem.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -19,14 +20,15 @@ namespace mantis {
 static bool s_ok = false;
 static int s_nextFish = 0, s_nextPlanet = 0;
 static constexpr int MAXC = 300;
-static CatchRec s_c[MAXC];
+static CatchRec* s_c = nullptr;                // runtime buffer (PSRAM)
+static bool catchesReady() { if (!s_c) s_c = (CatchRec*)memSlow(sizeof(CatchRec) * MAXC); return s_c != nullptr; }
 static int s_nc = 0;
 int catchCount() { return s_nc; }
 const CatchRec& catchAt(int i) { return s_c[i]; }
 static int biomeFromName(const char* n) { for (int b = 0; b < 32; b++) if (strcmp(biomeName((uint8_t)b), n) == 0) return b; return 0; }
 // idx,seed,name,family,len,kg,tier,biome name,water,when[,biome id]
 static void parseLine(const char* line) {
-    if (s_nc >= MAXC) return;
+    if (s_nc >= MAXC || !catchesReady()) return;
     char buf[256]; strncpy(buf, line, sizeof buf - 1); buf[sizeof buf - 1] = 0;
     char* f[12]; int n = 0; char* p = buf;
     while (n < 12) { f[n++] = p; char* c = strchr(p, ','); if (!c) break; *c = 0; p = c + 1; }
@@ -125,12 +127,15 @@ static bool writeMG(const char* path) {
     File f = SD.open(path, FILE_WRITE);
     if (!f) { displayReleaseBus(); return false; }
     uint8_t h[8]; mgHeader(h); f.write(h, 8);
-    static uint16_t row[MG_W]; static uint8_t out[MG_W * 2 * 8];       // write 8 rows (5 KB) at a time
+    static uint16_t row[MG_W];
+    static uint8_t* out = nullptr;                                     // write 8 rows (5 KB) at a time; runtime buffer (PSRAM)
+    if (!out) out = (uint8_t*)memSlow(MG_W * 2 * 8);
+    if (!out) { f.close(); displayReleaseBus(); return false; }
     for (int y = 0; y < MG_H; y++) {
         compositeRow(y, row);
         uint8_t* o = out + (y & 7) * MG_W * 2;
         for (int x = 0; x < MG_W; x++) { o[x * 2] = (uint8_t)(row[x] & 0xFF); o[x * 2 + 1] = (uint8_t)(row[x] >> 8); }
-        if ((y & 7) == 7) f.write(out, sizeof out);
+        if ((y & 7) == 7) f.write(out, MG_W * 2 * 8);
     }
     f.close();
     displayReleaseBus();

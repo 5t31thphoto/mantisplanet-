@@ -105,6 +105,7 @@ void setup() {
     cfg.internal_spk = true;
     cfg.internal_mic = false;                 // the Core2 shares one I2S port: the speaker keeps it
     M5.begin(cfg);
+    mantis::audioSpeakerBegin();                 // claim the speaker's DMA buffers before anything else allocates
     M5.Display.setRotation(1);
     M5.Display.setBrightness(110);
     if (M5.Imu.isEnabled()) {

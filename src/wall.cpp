@@ -3,6 +3,7 @@
 #include "storage.h"
 #include "fishgen.h"
 #include "ui.h"
+#include "mem.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -49,8 +50,10 @@ static void frameAt(uint16_t* ov, int fx, int fy, const CatchRec& c) {
         }
     FishSpec f;
     fishMake(f, c.seed, c.water, c.biome, c.tier);
-    static uint16_t cell[FW * 64];
-    memset(cell, 0, sizeof cell);
+    static uint16_t* cell = nullptr;                                   // runtime buffer (PSRAM)
+    if (!cell) cell = (uint16_t*)memSlow(FW * 64 * sizeof(uint16_t));
+    if (!cell) return;
+    memset(cell, 0, FW * 64 * sizeof(uint16_t));
     fishRender(f, cell, FW, 64, FW / 2, 30, FW - 12);
     for (int y = 0; y < 64; y++) for (int x = 0; x < FW; x++) if (cell[y * FW + x]) ov[(fy + 2 + y) * W + fx + x] = cell[y * FW + x];
     // the brass plaque

@@ -1,12 +1,13 @@
 #include "journey.h"
 #include "universe.h"
+#include "mem.h"
 #include <math.h>
 #include <string.h>
 
 namespace mantis {
 
 // ---------------- the biomes ----------------
-static BiomeParams DEF[B_ALL_N];
+static BiomeParams* DEF = nullptr;            // runtime buffer (internal RAM: biomeAt is a hot path)
 
 static void ramp(float (&r)[4][3], const int (&c)[4][3]) { for (int i = 0; i < 4; i++) for (int k = 0; k < 3; k++) r[i][k] = (float)c[i][k]; }
 static const int LEAF_STD[4][3]  = {{14, 44, 50}, {36, 92, 48}, {112, 166, 58}, {200, 218, 96}};
@@ -16,9 +17,9 @@ static const int BARK_STD[4][3]  = {{46, 26, 40}, {98, 58, 40}, {170, 104, 54}, 
 static const int ROCK_STD[4][3]  = {{64, 52, 100}, {116, 92, 124}, {190, 128, 112}, {226, 170, 140}};
 
 static void defineBiomes() {
-    static bool done = false;
-    if (done) return;
-    done = true;
+    if (DEF) return;
+    DEF = (BiomeParams*)memFast(sizeof(BiomeParams) * B_ALL_N);
+    if (!DEF) return;
     for (int i = 0; i < B_ALL_N; i++) {
         BiomeParams& b = DEF[i];
         memset(&b, 0, sizeof(b));
@@ -238,15 +239,21 @@ static void lerpParams(BiomeParams& o, const BiomeParams& a, const BiomeParams& 
 // Near a border every field lookup blends two biomes (~110 numbers). Thousands of lookups a frame land
 // on the same few spots, so the last blends are remembered (the blend is quantised to 1/128: invisible).
 struct BlendMemo { int a, b, q; BiomeParams p; };
-static BlendMemo s_memo[8];
-static void memoReset() { for (BlendMemo& m : s_memo) m.q = -1; s_gen++; }
+static constexpr int MEMO_N = 8;
+static BlendMemo* s_memo = nullptr;            // runtime buffer (internal RAM)
+static void memoReset() {
+    if (!s_memo) s_memo = (BlendMemo*)memFast(sizeof(BlendMemo) * MEMO_N);
+    if (s_memo) for (int i = 0; i < MEMO_N; i++) s_memo[i].q = -1;
+    s_gen++;
+}
 
 static int s_memoNext = 0;
 static const BiomeParams& blendOf(uint8_t ba, uint8_t bb, float t) {
     int q = (int)(t * 128.f + 0.5f);
-    for (BlendMemo& m : s_memo) if (m.q == q && m.a == ba && m.b == bb) return m.p;
+    if (!s_memo) memoReset();
+    for (int i = 0; i < MEMO_N; i++) { BlendMemo& m = s_memo[i]; if (m.q == q && m.a == ba && m.b == bb) return m.p; }
     BlendMemo& m = s_memo[s_memoNext];
-    s_memoNext = (s_memoNext + 1) & 7;
+    s_memoNext = (s_memoNext + 1) & (MEMO_N - 1);
     float tq = q / 128.f;
     m.a = ba; m.b = bb; m.q = q;
     lerpParams(m.p, DEF[ba], DEF[bb], tq * tq * (3.f - 2.f * tq));
@@ -254,6 +261,7 @@ static const BiomeParams& blendOf(uint8_t ba, uint8_t bb, float t) {
 }
 
 const BiomeParams& biomeAt(float D) {
+    if (!DEF) defineBiomes();
     int i = segAt(D);
     float into = D - s_start[i], left = s_start[i + 1] - D;
     if (left < BLEND * 0.5f && i + 1 < MAXSEG) return blendOf(s_biome[i], s_biome[i + 1], 0.5f - left / BLEND);   // approaching the border
