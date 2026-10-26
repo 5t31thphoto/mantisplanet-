@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <arduino.h>
 
 namespace mantis {
 
@@ -129,9 +128,6 @@ bool planetLoad() {
         free(P.nodes);
     }
     free(buf);
-#ifndef HOST
-    if (applied) Serial.printf("[mods] planet.json: %d colours applied\n", applied);
-#endif
     return applied > 0;
 }
 

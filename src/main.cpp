@@ -143,15 +143,8 @@ void setup() {
     }
     mantis::renderInit();
     mantis::storageBegin();                       // the SD card, if there is one
-    {   // creature art from the card (/mp-sprites/): anything valid replaces the built-in art; the rest stays
-        mantis::planetLoad();                                 // a planet's colours, if the card has one
-        int n = mantis::creaturesLoadMods();
-#ifndef HOST
-        if (n) Serial.printf("[mods] %d creature sprite files loaded from /mp-sprites\n", n);
-#else
-        (void)n;
-#endif
-    }
+    mantis::planetLoad();                         // a planet's colours, if the card has one
+    mantis::creaturesLoadMods();                  // creature art from the card (/mp-sprites/), if any
     mantis::bugsInit();
     mantis::fieldInit(currentYaw, totalDistance);
     mantis::sceneInit();
@@ -266,7 +259,6 @@ void loop() {
     hx::update(dt);
 
     mantis::renderSetAlign(aligning, mantis::controlsDragSum());
-    uint32_t tRender0 = micros();
     if (mantis::jarActive()) mantis::jarUpdate(dt);                 // the jar covers the screen: the world isn't redrawn behind it
     else mantis::renderFrame(currentYaw, totalDistance, walkSpeed, t);
     if (muteIconAt) {                                       // the icon shows for a moment, then fades
@@ -276,18 +268,5 @@ void loop() {
         else mantis::renderMuteIcon(mantis::audioMuted(), a);
     }
     if (showFps) mantis::renderFps((int)(fpsAvg + 0.5f));
-    uint32_t tPresent0 = micros();
     mantis::displayPresent();
-    {   // every 5 s: frame rate and where the time goes (serial monitor, 115200)
-        static uint32_t accR = 0, accP = 0, frames = 0, last = 0;
-        uint32_t tEnd = micros();
-        accR += tPresent0 - tRender0; accP += tEnd - tPresent0; frames++;
-        if (tEnd - last > 5000000u) {
-#ifndef HOST
-            Serial.printf("[perf] %.1f fps  render %.1f ms  present %.1f ms (includes waiting for the LCD)\n",
-                          frames * 1e6f / (tEnd - last), accR / 1000.f / frames, accP / 1000.f / frames);
-#endif
-            accR = accP = frames = 0; last = tEnd;
-        }
-    }
 }
