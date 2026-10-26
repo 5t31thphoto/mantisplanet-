@@ -28,3 +28,6 @@ inline uint32_t ulTaskNotifyTake(BaseType_t, uint32_t) { return 1; }
 inline void xTaskNotifyGive(TaskHandle_t) {}
 inline void vTaskDelay(uint32_t) {}
 inline BaseType_t xTaskCreatePinnedToCore(void (*)(void*), const char*, uint32_t, void*, int, TaskHandle_t* h, int) { static int t; if (h) *h = &t; return pdTRUE; }
+// the serial port (telemetry on the device; quiet here)
+struct HostSerial { void begin(unsigned long) {} template <class... A> int printf(const char*, A...) { return 0; } };
+static HostSerial Serial;

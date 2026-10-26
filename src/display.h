@@ -16,4 +16,7 @@ void compositeRow(int y, uint16_t* out320);
 // While saving to SD (it shares the SPI bus with the LCD) hold the bus: waits for the LCD push to finish.
 void displayHoldBus();
 void displayReleaseBus();
+// tests: the whole screen as each pipeline would send it (byte-swapped RGB565)
+void displayDebugLegacy(uint16_t* out320x240);
+void displayDebugStream(uint16_t* out320x240);
 }

@@ -371,6 +371,7 @@ void natureFish(uint8_t kind, float) {
         case FISH_MISS:    grain(0.f, 1, 1200.f, 500.f, 1.5f, 0.004f, 0.06f, 0.05f, 0.3f); break;
         case FISH_LANDED:  grain(0.f, 1, 1800.f, 400.f, 2.f, 0.004f, 0.25f, 0.2f, 0.4f); for (int i = 0; i < 5; i++) ping(0.3f + i * 0.17f, 700.f + rng.uni() * 500.f, 1.1f, 0.03f, 0.03f, 0.025f, 0.5f); break;
         case FISH_STOW:    grain(0.f, 0, 1400.f, 1100.f, 1.f, 0.02f, 0.1f, 0.04f, 0.15f); break;
+        case FISH_LIGHT:   grain(0.f, 0, 2200.f, 1800.f, 1.f, 0.002f, 0.015f, 0.04f, 0.05f); break;   // a little switch
         case FISH_BUG:     ping(0.f, 1760.f, 1.f, 0.02f, 0.25f, 0.035f, 0.5f); ping(0.08f, 2350.f, 1.f, 0.02f, 0.3f, 0.03f, 0.55f); break;   // into the jar
         case FISH_SHUTTER: grain(0.f, 0, 3500.f, 3000.f, 1.f, 0.002f, 0.02f, 0.07f, 0.1f); grain(0.07f, 0, 2500.f, 2000.f, 1.f, 0.002f, 0.025f, 0.05f, 0.1f); break;   // a camera shutter
     }

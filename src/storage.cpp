@@ -45,8 +45,14 @@ const char* biomeName(uint8_t b) {
 }
 
 #ifdef HOST
-static const char* ROOT = "sdcard";
+static const char* rootDir() { const char* r = getenv("MANTIS_SD"); return r && *r ? r : "sdcard"; }   // the desktop's "card": a folder
+#define ROOT rootDir()
+#ifdef _WIN32
+#include <direct.h>
+static void mk(const char* p) { _mkdir(p); }
+#else
 static void mk(const char* p) { mkdir(p, 0755); }
+#endif
 static int scanMax(const char* dir, const char* prefix) {
     int best = 0; DIR* d = opendir(dir); if (!d) return 0;
     while (dirent* e = readdir(d)) { int n = 0; char fmt[32]; snprintf(fmt, sizeof fmt, "%s_%%d.mg", prefix); if (sscanf(e->d_name, fmt, &n) == 1 && n > best) best = n; }
@@ -62,6 +68,13 @@ bool storageBegin() {
     if (FILE* f = fopen(p, "rb")) { char line[256]; while (fgets(line, sizeof line, f)) parseLine(line); fclose(f); }
     s_ok = true; return true;
 }
+bool storageReadFile(const char* path, uint8_t* buf, size_t cap, size_t* got) {
+    char p[160]; snprintf(p, sizeof p, "%s%s", ROOT, path);
+    FILE* f = fopen(p, "rb"); if (!f) return false;
+    size_t n = fread(buf, 1, cap, f); bool more = fgetc(f) != EOF; fclose(f);
+    if (more) return false;                                         // too big: not ours
+    *got = n; return true;
+}
 bool storageLoadTrophy(int idx, uint16_t* out) {
     char p[128]; snprintf(p, sizeof p, "%s/images/fish/fish_%04d.mg", ROOT, idx);
     FILE* f = fopen(p, "rb"); if (!f) return false;
@@ -70,7 +83,10 @@ bool storageLoadTrophy(int idx, uint16_t* out) {
     for (int y = 0; y < MG_H; y++) { if (fread(row, 1, sizeof row, f) != sizeof row) break; for (int x = 0; x < MG_W; x++) { uint16_t v = (uint16_t)(row[x * 2] | (row[x * 2 + 1] << 8)); out[y * MG_W + x] = v ? v : 0x0821; } }
     fclose(f); return true;
 }
-void storageDate(char* out, int n) { time_t t = time(nullptr); struct tm* tm = localtime(&t); strftime(out, n, "%Y-%m-%d %H:%M", tm); }
+void storageDate(char* out, int n) {
+    if (getenv("MANTIS_FIXED_DATE")) { snprintf(out, n, "%s", getenv("MANTIS_FIXED_DATE")); return; }   // tests: a fixed clock
+    time_t t = time(nullptr); struct tm* tm = localtime(&t); strftime(out, n, "%Y-%m-%d %H:%M", tm);
+}
 static bool writeMG(const char* path) {
     FILE* f = fopen(path, "wb"); if (!f) return false;
     uint8_t h[8]; mgHeader(h); fwrite(h, 1, 8, f);
@@ -103,6 +119,16 @@ bool storageBegin() {
     }
     displayReleaseBus();
     return s_ok;
+}
+bool storageReadFile(const char* path, uint8_t* buf, size_t cap, size_t* got) {
+    if (!s_ok) return false;
+    displayHoldBus();                                               // the card shares the SPI bus with the LCD
+    File f = SD.open(path);
+    bool ok = false;
+    if (f && !f.isDirectory() && (size_t)f.size() <= cap) { *got = f.read(buf, f.size()); ok = *got == (size_t)f.size(); }
+    if (f) f.close();
+    displayReleaseBus();
+    return ok;
 }
 bool storageLoadTrophy(int idx, uint16_t* out) {
     if (!s_ok) return false;

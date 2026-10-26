@@ -24,6 +24,9 @@ const char* baitName(uint8_t kind);
 int  baitCount(uint8_t kind);
 int  baitSelected();                                // -1 = no bait
 void baitCycle();                                   // the next bait you have
+void baitSelect(int kind);                          // put this kind on the hook (-1: the plain lure)
+bool baitFound(uint8_t kind);                       // ever caught one (the collection keeps its discoveries)
+void baitAdd(uint8_t kind, int n);                  // tests
 bool baitConsume();                                 // use one on the hook (false if none)
 uint8_t baitSpecialBiome(uint8_t kind);             // the biome a special bait belongs to (255: everyday bait)
 

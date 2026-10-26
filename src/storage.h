@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 #include "fishgen.h"
 // The SD card: trophy shots and screenshots in the locked .mg format (docs/MG_FORMAT.md), and the catch log.
 //   /images/fish/fish_0001.mg      trophy shots
@@ -9,6 +10,8 @@
 namespace mantis {
 bool storageBegin();
 bool storageReady();
+// Read a whole file from the card (mods: /mp-sprites/...). False if missing, unreadable or bigger than cap.
+bool storageReadFile(const char* path, uint8_t* buf, size_t cap, size_t* got);
 bool storageScreenshot();                                  // what's on screen now
 bool storageSaveTrophy(const FishSpec& f);                 // what's on screen now (the trophy card) + a log line
 void storageDate(char* out, int n);                        // "2026-10-19 18:42" (or "" if the clock isn't set)

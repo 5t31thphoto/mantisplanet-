@@ -47,7 +47,7 @@ static void begin(float tod, int biome, float yawOffset = 0.f) {
   }
   wasBumped = false;
 }
-static float sunAzNow() { return -(g_scene.tod - 0.245f) * kTau; }
+static float sunAzNow() { return g_scene.sunAz; }
 static void face(float rel) { frame(0.f, 0.f); float yaw = sunAzNow() + rel; currentYaw = yaw; setYaw(yaw); fieldInit(currentYaw, totalDistance); }
 static void faceAbs(float yaw) { currentYaw = yaw; setYaw(yaw); fieldInit(currentYaw, totalDistance); }
 static void run(int frames, float tilt, float turn = 0.f) { for (int i = 0; i < frames; i++) frame(tilt, turn); }
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
   shot("08_fireflies");
   // aurora night
   begin(0.95f, 1); g_force.cloud = 0.1f; g_force.aurora = 1.f; g_force.meteors = 1.f;
-  faceAbs(1.5708f);                                  // the aurora is in the north
+  faceAbs(AZ_NORTH);                                 // the aurora is in the north
   run(120, 0.f); shot("09_aurora");
   // noon meadow, wind in the trees
   begin(0.48f, 2); g_force.cloud = 0.4f; g_force.wind = 0.7f;

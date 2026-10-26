@@ -145,7 +145,7 @@ static uint8_t pickOrdinary(int i, int octant, uint8_t avoid) {
     float w[B_ORDINARY_N] = {1.f, 1.f, 0.8f, 0.8f, 0.7f, 0.8f, 0.6f, 0.7f, 0.f};   // snow only when you head north
     if (octant >= 0) {
         float ang = octant * 0.7853982f;
-        float north = sinf(ang), west = -cosf(ang);
+        float north = -sinf(ang), west = -cosf(ang);           // octant 0 = east; bearings grow toward the south
         w[B_FOREST] += 0.4f * north;
         w[B_FALLS] += 0.6f * fmaxf(0.f, north) + 0.6f * fmaxf(0.f, west);
         w[B_HIGHLAND] += 0.5f * fmaxf(0.f, -north) + 0.3f * fmaxf(0.f, west);
@@ -187,13 +187,13 @@ static int segAt(float D) {
 static uint8_t specialFor(int oct) {
     switch (oct) {
         case 0: return B_JAPAN;                                // east, toward the sunrise
-        case 5: return B_CANYON;                               // southwest
-        case 3: return B_REDWOODS;                             // northwest
+        case 1: return B_KARST;                                // southeast
+        case 2: return B_RAINFOREST;                           // south
+        case 3: return B_CANYON;                               // southwest
         case 4: return B_COAST;                                // west, into the sunset
-        case 7: return B_KARST;                                // southeast
-        case 2: return B_TUNDRA;                               // north
-        case 6: return B_RAINFOREST;                           // south
-        case 1: return B_GROVE;                                // northeast
+        case 5: return B_REDWOODS;                             // northwest
+        case 6: return B_TUNDRA;                               // north
+        case 7: return B_GROVE;                                // northeast
         default: return 255;                                   // the other directions arrive in later phases
     }
 }
@@ -241,6 +241,18 @@ static void lerpParams(BiomeParams& o, const BiomeParams& a, const BiomeParams& 
 struct BlendMemo { int a, b, q; BiomeParams p; };
 static constexpr int MEMO_N = 8;
 static BlendMemo* s_memo = nullptr;            // runtime buffer (internal RAM)
+float* journeyRampSlot(int biome, const char* ramp, int shade) {
+    if (!DEF) defineBiomes();
+    if (!DEF || biome < 0 || biome >= B_ALL_N || shade < 0 || shade > 3) return nullptr;
+    BiomeParams& b = DEF[biome];
+    if (!strcmp(ramp, "leaf")) return b.leaf[shade];
+    if (!strcmp(ramp, "grass")) return b.grass[shade];
+    if (!strcmp(ramp, "stone")) return b.stone[shade];
+    if (!strcmp(ramp, "bark")) return b.bark[shade];
+    if (!strcmp(ramp, "rock")) return b.rock[shade];
+    return nullptr;
+}
+void journeyColoursChanged() { memoReset(); }
 static void memoReset() {
     if (!s_memo) s_memo = (BlendMemo*)memFast(sizeof(BlendMemo) * MEMO_N);
     if (s_memo) for (int i = 0; i < MEMO_N; i++) s_memo[i].q = -1;

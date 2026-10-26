@@ -17,6 +17,9 @@
 #include "storage.h"
 #include "wall.h"
 #include "bugs.h"
+#include "jar.h"
+#include "creatures.h"
+#include "planet.h"
 #ifndef HOST
 #include <Preferences.h>
 #endif
@@ -35,6 +38,8 @@ static int touchX0 = 0, touchY0 = 0;
 static bool longFired = false;
 static uint32_t muteIconAt = 0;
 static bool tapPending = false;
+static bool aligning = false;
+static int alignLastX = 0;
 static int tapX = 0, tapY = 0;
 static uint8_t prevFishState = 0;
 static uint32_t landedAt = 0;
@@ -64,9 +69,19 @@ static bool loadMute() {
 static void serviceTouch() {
     auto td = M5.Touch.getDetail();
     uint32_t now = millis();
-    if (td.wasPressed()) { touchDown = now; touchX0 = td.x; touchY0 = td.y; longFired = false; }
+    if (td.wasPressed()) { touchDown = now; touchX0 = td.x; touchY0 = td.y; longFired = false; aligning = false; }
+    if (td.isPressed() && aligning) {                                    // slide the world under your finger, 1:1
+        int dx = td.x - alignLastX;
+        alignLastX = td.x;
+        if (dx) mantis::controlsAlign(-(dx * 0.5f) * mantis::renderFov() / 160.f);
+    }
     else if (td.isPressed() && touchDown) {
-        if (abs(td.x - touchX0) + abs(td.y - touchY0) > 14) touchDown = 0;          // a drag, not a hold
+        bool canAlign = touchY0 < 240 && !mantis::wallActive() && !mantis::jarActive() && mantis::fishingView().state != mantis::FS_FIGHT && !longFired;
+        if (canAlign && abs(td.x - touchX0) > 12 && abs(td.x - touchX0) > abs(td.y - touchY0)) {   // a sideways drag: aligning the world
+            aligning = true; alignLastX = td.x; touchDown = 0;
+            mantis::controlsAlign(-((td.x - touchX0) * 0.5f) * mantis::renderFov() / 160.f);
+        }
+        else if (abs(td.x - touchX0) + abs(td.y - touchY0) > 14) touchDown = 0;          // a drag, not a hold
         else if (!longFired && now - touchDown > 650) {
             longFired = true;
             bool m = !mantis::audioMuted();
@@ -77,6 +92,7 @@ static void serviceTouch() {
         }
     }
     if (td.wasReleased()) {
+        if (aligning) { aligning = false; mantis::controlsAlignDone(); hx::fishTick(0.3f); }   // the correction teaches the drift tracker
         if (touchDown && !longFired && now - touchDown < 350 && touchY0 < 240) { tapPending = true; tapX = touchX0; tapY = touchY0; }   // a short tap on the screen
         touchDown = 0;
     }
@@ -127,6 +143,15 @@ void setup() {
     }
     mantis::renderInit();
     mantis::storageBegin();                       // the SD card, if there is one
+    {   // creature art from the card (/mp-sprites/): anything valid replaces the built-in art; the rest stays
+        mantis::planetLoad();                                 // a planet's colours, if the card has one
+        int n = mantis::creaturesLoadMods();
+#ifndef HOST
+        if (n) Serial.printf("[mods] %d creature sprite files loaded from /mp-sprites\n", n);
+#else
+        (void)n;
+#endif
+    }
     mantis::bugsInit();
     mantis::fieldInit(currentYaw, totalDistance);
     mantis::sceneInit();
@@ -147,12 +172,18 @@ void loop() {
 
     bool trying = false;
     mantis::updateControls(dt, currentYaw, currentSpeed, trying);   // calls M5.update()
-    if (mantis::fishingActive() || mantis::wallActive()) { currentSpeed = 0.f; trying = false; }   // the rod is out / the wall is up: tilts don't walk
+    if (mantis::fishingActive() || mantis::wallActive() || mantis::jarActive()) { currentSpeed = 0.f; trying = false; }   // the rod is out / the wall or the jar is up: tilts don't walk
     serviceTouch();
-    if (M5.BtnB.wasPressed()) { if (mantis::fishingActive()) mantis::baitCycle(); else showFps = !showFps; }   // middle button: bait (rod out) / frame rate
+    if (M5.BtnB.wasHold()) {                                  // middle button, held: the flashlight
+        mantis::renderSetFlashlight(!mantis::renderFlashlight());
+        mantis::sfxFish(mantis::FISH_LIGHT, 0.f); hx::fishTick(0.3f);
+    } else if (M5.BtnB.wasClicked()) {                        // middle button, tapped: the bug jar
+        if (mantis::jarActive()) mantis::jarClose();
+        else if (!mantis::wallActive()) mantis::jarOpen();
+    }
     if (M5.BtnC.wasPressed()) {                               // the right touch button: the catch wall
         if (mantis::wallActive()) mantis::wallClose();
-        else if (!mantis::fishingActive()) mantis::wallOpen();
+        else if (!mantis::fishingActive() && !mantis::jarActive()) mantis::wallOpen();
     }
     if (M5.BtnA.wasPressed()) {                               // the left touch button: a screenshot to SD
         if (mantis::storageScreenshot()) { mantis::sfxFish(mantis::FISH_SHUTTER, 0.f); hx::fishTick(0.5f); }
@@ -163,7 +194,14 @@ void loop() {
     // glancing off the side of it you slide past. A shore stops you too.
     float want = currentSpeed > 0.02f ? currentSpeed * dt * 9.0f : 0.f;
     bool bumped = false;
-    float moved = mantis::fieldStep(currentYaw, want, totalDistance, &bumped);
+    float moved = 0.f;
+    for (float left = want; left > 1e-5f;) {                  // in steps of at most 10 cm: the same walk meets things the same way at any frame rate
+        float st = fminf(left, 0.1f);
+        bool b = false;
+        float m = mantis::fieldStep(currentYaw, st, totalDistance + moved, &b);
+        moved += m; bumped |= b; left -= st;
+        if (b && m < st * 0.35f) break;                       // stopped dead against something: no further this frame
+    }
     totalDistance += moved;
     mantis::journeyUpdate(totalDistance, currentYaw, moved);
     bool stopped = bumped && moved < want * 0.35f;
@@ -175,10 +213,13 @@ void loop() {
     const mantis::Scene& sc = mantis::g_scene;
     if (tapPending) {
         tapPending = false;
-        if (mantis::wallActive()) mantis::wallTap(tapX, tapY);
-        else if (!mantis::bugsTryCatch(tapX, tapY)) mantis::fishingTap(currentYaw, totalDistance);   // a bug first, then the water
+        if (mantis::jarActive()) mantis::jarTap(tapX, tapY);
+        else if (mantis::wallActive()) mantis::wallTap(tapX, tapY);
+        else if (mantis::bugsTryCatch(tapX, tapY)) {}                          // a bug first
+        else if (!mantis::fishingActive() && mantis::g_scene.stillFor > 3.f && mantis::fieldTryPet()) { hx::fishTick(0.25f); hx::fishTick(0.15f); }   // a doe close by: her nose to your hand
+        else mantis::fishingTap(currentYaw, totalDistance);                   // then the water
     }
-    mantis::fishingUpdate(dt, currentYaw, totalDistance, mantis::controlsPitchDeg(), mantis::controlsFlickDps(), sc);
+    if (!mantis::jarActive()) mantis::fishingUpdate(dt, currentYaw, totalDistance, mantis::controlsPitchDeg(), mantis::controlsFlickDps(), sc);   // fishing waits while the jar is open
     mantis::bugsUpdate(dt, currentYaw, totalDistance, walkSpeed, sc);
     {   // landed: hold it up on the trophy card; a moment later it's saved to the card
         uint8_t fs = mantis::fishingView().state;
@@ -224,7 +265,10 @@ void loop() {
     lastAwe = sc.awe;
     hx::update(dt);
 
-    mantis::renderFrame(currentYaw, totalDistance, walkSpeed, t);
+    mantis::renderSetAlign(aligning, mantis::controlsDragSum());
+    uint32_t tRender0 = micros();
+    if (mantis::jarActive()) mantis::jarUpdate(dt);                 // the jar covers the screen: the world isn't redrawn behind it
+    else mantis::renderFrame(currentYaw, totalDistance, walkSpeed, t);
     if (muteIconAt) {                                       // the icon shows for a moment, then fades
         float age = (millis() - muteIconAt) / 1000.f;
         float a = age < 1.2f ? 1.f : 1.f - (age - 1.2f) / 0.8f;
@@ -232,5 +276,18 @@ void loop() {
         else mantis::renderMuteIcon(mantis::audioMuted(), a);
     }
     if (showFps) mantis::renderFps((int)(fpsAvg + 0.5f));
+    uint32_t tPresent0 = micros();
     mantis::displayPresent();
+    {   // every 5 s: frame rate and where the time goes (serial monitor, 115200)
+        static uint32_t accR = 0, accP = 0, frames = 0, last = 0;
+        uint32_t tEnd = micros();
+        accR += tPresent0 - tRender0; accP += tEnd - tPresent0; frames++;
+        if (tEnd - last > 5000000u) {
+#ifndef HOST
+            Serial.printf("[perf] %.1f fps  render %.1f ms  present %.1f ms (includes waiting for the LCD)\n",
+                          frames * 1e6f / (tEnd - last), accR / 1000.f / frames, accP / 1000.f / frames);
+#endif
+            accR = accP = frames = 0; last = tEnd;
+        }
+    }
 }

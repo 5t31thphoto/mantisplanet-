@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
   check(buried * 100 <= solid, "solid things aren't buried in each other (<1%)");
   // ---------------- way-finding ----------------
   printf("way-finding (8 headings x 20 simulated minutes)\n");
-  const char* DIRN[8] = {"E","NE","N","NW","W","SW","S","SE"};
+  const char* DIRN[8] = {"E","SE","S","SW","W","NW","N","NE"};
   int stuckRuns = 0;
   for (int dIdx = 0; dIdx < 8; dIdx++) {
     journeyInit(777u + dIdx * 13u, 0.f);

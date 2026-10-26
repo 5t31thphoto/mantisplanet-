@@ -1,6 +1,12 @@
 #include "universe.h"
 #include "journey.h"
 #include <math.h>
+#ifndef HOST
+#include <esp_attr.h>
+#define MP_HOT IRAM_ATTR          // the noise runs ~23,000 times a frame: keep it in instruction RAM (no flash-cache stalls)
+#else
+#define MP_HOT
+#endif
 
 namespace mantis {
 
@@ -9,26 +15,29 @@ static uint32_t s_seed = 0x5EE49A3Fu;
 void universeInit(uint32_t seed) { s_seed = seed ? hash32(seed) : 0x5EE49A3Fu; }
 uint32_t worldSeed() { return s_seed; }
 
-static inline float lattice(int ix, int iy, int P, uint32_t salt) {
-    ix %= P;
-    if (ix < 0) ix += P;
-    uint32_t h = hash32((uint32_t)ix * 0x9E3779B1u ^ hash32((uint32_t)iy * 0x85EBCA77u ^ s_seed ^ salt));
-    return (h >> 8) * (1.0f / 16777216.0f);
-}
 
-float vnoiseP(float u, float v, int P, uint32_t salt) {
+MP_HOT float vnoiseP(float u, float v, int P, uint32_t salt) {
     float fu = floorf(u), fv = floorf(v);
     int iu = (int)fu, iv = (int)fv;
     float tu = u - fu, tv = v - fv;
     tu = tu * tu * (3.f - 2.f * tu);
     tv = tv * tv * (3.f - 2.f * tv);
-    float a = lattice(iu, iv, P, salt), b = lattice(iu + 1, iv, P, salt);
-    float c = lattice(iu, iv + 1, P, salt), d = lattice(iu + 1, iv + 1, P, salt);
+    // The four lattice corners, as lattice() computes them, without repeating work: the wrapped column is found
+    // once (one modulo, not four) and each row's inner hash is shared by its two corners. Integer-only changes:
+    // every float operation below is the same as before, in the same order.
+    int x0 = iu % P; if (x0 < 0) x0 += P;
+    int x1 = x0 + 1; if (x1 == P) x1 = 0;
+    const uint32_t r0 = hash32((uint32_t)iv * 0x85EBCA77u ^ s_seed ^ salt);
+    const uint32_t r1 = hash32((uint32_t)(iv + 1) * 0x85EBCA77u ^ s_seed ^ salt);
+    float a = (hash32((uint32_t)x0 * 0x9E3779B1u ^ r0) >> 8) * (1.0f / 16777216.0f);
+    float b = (hash32((uint32_t)x1 * 0x9E3779B1u ^ r0) >> 8) * (1.0f / 16777216.0f);
+    float c = (hash32((uint32_t)x0 * 0x9E3779B1u ^ r1) >> 8) * (1.0f / 16777216.0f);
+    float d = (hash32((uint32_t)x1 * 0x9E3779B1u ^ r1) >> 8) * (1.0f / 16777216.0f);
     float ab = a + (b - a) * tu, cd = c + (d - c) * tu;
     return ab + (cd - ab) * tv;
 }
 
-float fbmP(float u, float v, int P, int oct, uint32_t salt) {
+MP_HOT float fbmP(float u, float v, int P, int oct, uint32_t salt) {
     float sum = 0.f, amp = 0.5f, norm = 0.f;
     for (int i = 0; i < oct; i++) {
         sum += amp * vnoiseP(u, v, P, salt + (uint32_t)i * 0x632BE5ABu);
@@ -43,6 +52,13 @@ float dayClock(float t, float distance) { return s_dayOffset + t * (1.f / 600.f)
 void setTimeOfDay(float tod, float t, float distance) {
     float c = dayClock(t, distance);
     s_dayOffset += tod - (c - floorf(c));
+}
+
+float sunPathElevation(float tod) {
+    float u = (tod - 0.245f) / 0.49f;                       // 0 at sunrise, 1 at sunset
+    if (u >= 0.f && u <= 1.f) return 0.95f * sinf(3.14159265f * u);   // up to ~54 degrees at noon
+    float d = u < 0.f ? -u : u - 1.f;                       // below the horizon at night
+    return -0.95f * sinf(3.14159265f * fminf(d, 0.5f));
 }
 
 float oceanShore(float a, float D) {

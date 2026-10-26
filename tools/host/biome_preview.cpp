@@ -47,7 +47,7 @@ static void begin(float tod, int biome, float yawOffset = 0.f) {
   }
   wasBumped = false;
 }
-static float sunAzNow() { return -(g_scene.tod - 0.245f) * kTau; }
+static float sunAzNow() { return g_scene.sunAz; }
 static void face(float rel) { frame(0.f, 0.f); float yaw = sunAzNow() + rel; currentYaw = yaw; setYaw(yaw); fieldInit(currentYaw, totalDistance); }
 static void faceAbs(float yaw) { currentYaw = yaw; setYaw(yaw); fieldInit(currentYaw, totalDistance); }
 static void run(int frames, float tilt, float turn = 0.f) { for (int i = 0; i < frames; i++) frame(tilt, turn); }
@@ -158,7 +158,7 @@ int main(int argc, char** argv) {
   totalDistance = D; initControls(); frame(0, 0);
   for (float d = D - 3000.f; d < D + 3000.f; d += 200.f) journeyForce(d, (uint8_t)biome);
   setTimeOfDay(tod, millis() / 1000.f, totalDistance); frame(0, 0);
-  float yaw = -(g_scene.tod - 0.245f) * kTau + yawRel;
+  float yaw = g_scene.sunAz + yawRel;
   setYaw(yaw); currentYaw = yaw; fieldInit(yaw, totalDistance);
   FieldObj* o = const_cast<FieldObj*>(fieldObjects());
   for (int i = 0; i < FIELD_N; i++) {               // a clear foreground for the shot

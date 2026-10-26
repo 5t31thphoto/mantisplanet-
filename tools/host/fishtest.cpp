@@ -3,6 +3,7 @@
 #include "../../src/fishing.h"
 #include "../../src/storage.h"
 #include "../../src/bugs.h"
+#include "../../src/jar.h"
 #include <sys/stat.h>
 #include "../../src/journey.h"
 using namespace mantis;
@@ -32,12 +33,15 @@ static bool faceWater() {                            // stand just short of a la
 }
 // a sensible angler: reel, but ease off when the line starts to stutter, and face the fish
 static int g_dbg = 0;
+static long g_fightFrames = 0, g_onLand = 0;
 static int fightOnce(int& tierOut, int maxFrames = 4000) {
   int i = 0;
   for (; i < maxFrames; i++) {
     const FishView& F = fishingView();
     if (F.state != FS_FIGHT) break;
     tierOut = F.tier;
+    g_fightFrames++;
+    if (!fishingWaterAt(F.fishAng, totalDistance + fmaxf(F.shoreZ, F.lineOut) + 0.05f) && !fishingWaterAt(F.fishAng, totalDistance + fmaxf(F.shoreZ, F.lineOut) - 0.35f)) g_onLand++;
     if (getenv("FTRACE") && F.tier == 1 && (i % 30) == 0 && i < 900) printf("      t%3d out %5.1f T %.2f reel %.2f ease %.2f spd %+.2f sta %.2f pitch %.1f rel %.2f\n", i / 30, F.lineOut, F.tension, F.reel, F.ease, F.lineSpeed, F.stamina, controlsPitchDeg(), atan2f(sinf(F.fishAng - currentYaw), cosf(F.fishAng - currentYaw)));
     // aim for steady pressure around 80%: ease when it stutters, crank when it goes slack
     float want = F.breakRisk > 0.05f || F.tension > 0.95f ? 14.f : F.tension < 0.6f ? -22.f : F.tension < 0.8f ? -12.f : -4.f;
@@ -68,6 +72,15 @@ int main() {
   int end = fightOnce(tier);
   printf("  (tier %d fight ended in state %d, length %.0f cm)\n", tier, end, fishingView().lengthCm);
   check(end == FS_LANDED, "a sensible angler lands it");
+  for (int n = 0; n < 6; n++) {                               // more fights, watching where the fish goes
+    for (int i = 0; i < 260; i++) frame(0, 0);
+    aim(); tap(); for (int i = 0; i < 40; i++) frame(0, 0);
+    if (fishingView().state != FS_WAIT) continue;
+    fishingForceBite(); frame(0, 0); g_flickDps = 260.f; frame(0, 0);
+    int t = 0; fightOnce(t);
+  }
+  printf("  (%ld fight frames, %ld with the fish out of the water)\n", g_fightFrames, g_onLand);
+  check(g_onLand == 0, "the fish never leaves the water during a fight");
   for (int i = 0; i < 40; i++) frame(0, 0);                  // the trophy card is saved a moment after landing
   int nf = countFiles("sdcard/images/fish", "fish");
   char tp[128]; snprintf(tp, sizeof tp, "sdcard/images/fish/fish_%04d.mg", nf);
@@ -102,10 +115,23 @@ int main() {
     int t2 = 0; fightOnce(t2);
     for (int i = 0; i < 260; i++) frame(0, 0);
   }
-  // missing the bite, and turning away
+  // slow drift must not put the rod away (the view creeping 60 degrees over half a minute)
   aim(); tap(); for (int i = 0; i < 40; i++) frame(0, 0);
-  fishingForceBite(); for (int i = 0; i < 60; i++) frame(0, 0);
-  check(fishingView().state == FS_WAIT && !fishingView().biting, "too slow to strike: the fish gets away, keep waiting");
+  for (int i = 0; i < 900 && fishingActive(); i++) frame(0.f, 2.f);
+  check(fishingActive(), "slow drift doesn't put the rod away (only turning away does)");
+  bugsInit();                                       // (a bug that wandered under the finger would take the tap)
+  if (fishingActive()) { tap(); for (int i = 0; i < 60; i++) frame(0, 0); }
+  // missing the bite, and turning away
+  bugsInit();
+  aim(); tap(); for (int i = 0; i < 40; i++) frame(0, 0);
+  fishingForceBite(); frame(0, 0);
+  bool bit = fishingView().biting, gotAway = false, stillFishing = true;
+  for (int i = 0; i < 60; i++) {                     // don't strike: the bite should end on its own, rod still out
+    frame(0, 0);
+    if (bit && !fishingView().biting) gotAway = true;
+    if (fishingView().state != FS_WAIT) stillFishing = false;
+  }
+  check(bit && gotAway && stillFishing, "too slow to strike: the fish gets away, keep waiting");
   for (int i = 0; i < 30; i++) frame(0.f, 90.f);
   for (int i = 0; i < 40; i++) frame(0, 0);
   check(!fishingActive(), "turning away from the water puts the rod away");

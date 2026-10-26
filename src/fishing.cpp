@@ -27,6 +27,8 @@ static Fight TIERS[4] = {
 };
 static float K_REEL_A = 0.2f, K_REEL_B = 0.25f, K_BREAK = 2.6f, K_DRAG = 0.85f;   // the drag slips before the line breaks
 static float s_fightT = 0.f, s_throw = 0.f;
+static bool s_waterRules = true;               // off only for balance simulations (no real lake around them)
+static float s_lastYaw = 0.f, s_turnRecent = 0.f;     // a deliberate turn, not slow drift, is what puts the rod away
 static float s_nextBite = 0.f, s_nextNibble = 0.f, s_waitT = 0.f, s_biteUntil = 0.f;
 static int s_nibbles = 0;
 static float s_runT = 0.f, s_runDir = 1.f, s_kickT = 0.f, s_slack = 0.f, s_stamLeft = 1.f;
@@ -35,6 +37,18 @@ static FishSpec s_spec;
 const FishSpec& fishingSpec() { return s_spec; }
 
 static void enter(uint8_t st);
+bool fishingWaterAt(float a, float D) { return lakeField(a, D) > LAKE_T || inStream(a, D) || paddyAt(a, D); }
+// Along this bearing: where the water begins (its near edge) and where it ends (its far edge), within reach.
+static bool waterSpan(float a, float D, float& nearZ, float& farZ) {
+    nearZ = -1.f;
+    for (float z = 0.5f; z < 30.f; z += 0.4f) {
+        bool w = fishingWaterAt(a, D + z);
+        if (w && nearZ < 0.f) nearZ = z;
+        if (!w && nearZ >= 0.f) { farZ = z - 0.4f; return true; }
+    }
+    if (nearZ >= 0.f) { farZ = 30.f; return true; }
+    return false;
+}
 bool fishingActive() { return V.state != FS_OFF; }
 const FishView& fishingView() { return V; }
 void fishingForceBite() { s_forceBite = true; }
@@ -44,7 +58,8 @@ void fishingTestFight(uint8_t tier, float lineOut, float yaw, uint32_t seed) {
     V = FishView(); V.castYaw = yaw; V.bobZ = lineOut; V.tier = tier;
     V.fishSeed = s_rng; fishMake(s_spec, V.fishSeed, WATER_LAKE, B_LAKES, tier); V.lengthCm = s_spec.lengthCm;
     enter(FS_FIGHT); V.rodOut = 1.f;
-    V.lineOut = lineOut; V.fishAng = yaw; V.stamina = 1.f; V.tension = 0.5f; V.breakRisk = 0.f;
+    V.lineOut = lineOut; V.fishAng = yaw; V.stamina = 1.f; V.tension = 0.5f; V.breakRisk = 0.f; V.shoreZ = 1.2f;
+    s_waterRules = false;
     s_runT = 0.f; s_kickT = 0.f; s_slack = 0.f; s_stamLeft = 1.f; s_fightT = 0.f; s_throw = 0.f;
 }
 void fishingTune(int tier, float strength, float stamina, float runRate, float runPow, float ka, float kb, float kbreak) {
@@ -96,6 +111,7 @@ bool fishingTap(float yaw, float distance) {
         if (z <= 0.f) return false;
         V = FishView();
         V.castYaw = yaw; V.bobZ = z; V.water = kind;
+        s_waterRules = true;
         enter(FS_CAST);
         sfxFish(FISH_CAST, 0.f);
         return true;
@@ -124,13 +140,18 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
     V.ease = clampf((pitchDeg - 6.f) / 20.f, 0.f, 1.f);            // lean forward: give line
     bool flick = flickDps > 150.f;
     float away = fabsf(wrapPi(yaw - V.castYaw));
+    {   // how briskly you've been turning: a deliberate turn is fast (tens of degrees a second); gyro drift is slow
+        float rate = dt > 0.f ? fabsf(wrapPi(yaw - s_lastYaw)) / dt : 0.f;
+        s_lastYaw = yaw;
+        s_turnRecent = rate > 0.26f ? 1.5f : fmaxf(0.f, s_turnRecent - dt);   // > ~15 deg/s within the last 1.5 s
+    }
     switch (V.state) {
         case FS_OFF: break;
         case FS_CAST:
             if (V.t > 0.8f) { enter(FS_WAIT); s_waitT = 0.f; s_nextBite = biteDelay(sc); s_nibbles = (int)(frand() * 3.5f); s_nextNibble = s_nextBite - s_nibbles * (0.9f + frand()) ; sfxFish(FISH_PLOP, 0.f); }
             break;
         case FS_WAIT: {
-            if (away > 0.6f) { enter(FS_STOW); sfxFish(FISH_STOW, 0.f); break; }   // turned away: put the rod away
+            if (away > 0.6f && s_turnRecent > 0.f) { enter(FS_STOW); sfxFish(FISH_STOW, 0.f); break; }   // you turned away: put the rod away (slow drift never does)
             s_waitT += dt;
             V.nibble = fmaxf(0.f, V.nibble - dt * 5.f);
             V.dip = fmaxf(0.f, V.dip - dt * 3.f);
@@ -151,6 +172,7 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
                     V.biting = false;
                     enter(FS_FIGHT);
                     V.lineOut = V.bobZ; V.fishAng = V.castYaw; V.stamina = 1.f; V.tension = 0.5f; V.breakRisk = 0.f;
+                    { float nz, fz; V.shoreZ = waterSpan(V.castYaw, distance, nz, fz) ? nz : 1.2f; }
                     s_runT = 0.f; s_kickT = 0.f; s_slack = 0.f; s_stamLeft = 1.f; s_fightT = 0.f; s_throw = 0.f;
                     hx::fishHookSet(); sfxFish(FISH_HOOKSET, 0.f);
                     baitConsume();                                         // the bait's gone
@@ -168,6 +190,7 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
             // the fish: a steady pull that fades as it tires, runs, head shakes, the odd jump
             if (s_runT <= 0.f && frand() < F.runRate * sta * dt * 4.f) { s_runT = 0.8f + frand() * 1.4f; s_runDir = frand() < 0.5f ? -1.f : 1.f; sfxFish(FISH_RUN, 0.f); }
             float pull = F.strength * (0.35f + 0.65f * sta);
+            const float prevAng = V.fishAng;
             if (s_runT > 0.f) { s_runT -= dt; pull += F.runPow * sta; V.fishAng += s_runDir * 0.22f * dt; }
             V.fishAng += wrapPi(V.castYaw - V.fishAng) * 0.05f * dt;    // drifts back toward where it bit
             s_kickT -= dt;
@@ -187,6 +210,14 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
             float control = clampf(1.f - mis / 1.2f, 0.3f, 1.f);
             V.lineSpeed = pull * 2.2f * (1.f + V.ease) - V.reel * 2.4f * control * (1.f - 0.4f * pull) - 0.25f;   // a strong fish is hard to gain on
             V.lineOut = clampf(V.lineOut + V.lineSpeed * dt, 0.f, 60.f);
+            if (s_waterRules) {   // a fish is a creature of the water: it turns back at the bank, and the line can't run out over land
+                float nz, fz;
+                if (!waterSpan(V.fishAng, distance, nz, fz)) { V.fishAng = prevAng; s_runDir = -s_runDir; waterSpan(V.fishAng, distance, nz, fz); }
+                if (waterSpan(V.fishAng, distance, nz, fz)) {
+                    if (V.lineOut > fz) { if (V.fishAng != prevAng) { V.fishAng = prevAng; s_runDir = -s_runDir; } waterSpan(V.fishAng, distance, nz, fz); V.lineOut = fminf(V.lineOut, fz); }
+                    V.shoreZ = nz;
+                }
+            }
             V.tension = clampf(fminf(pull * (1.f - 0.75f * V.ease), K_DRAG) + V.reel * (K_REEL_A + K_REEL_B * pull) * control + mis * 0.12f, 0.f, 1.5f);   // the fish alone can only pull drag; hauling against it loads the line
             s_stamLeft = clampf(s_stamLeft - dt * (0.05f + 0.35f * V.tension) / F.stamina, 0.f, 1.f);   // held under steady pressure it tires
             V.stamina = s_stamLeft;
@@ -197,7 +228,9 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
             if (V.lineOut >= 60.f || V.breakRisk >= 1.f) { V.lostWhy = 1; enter(FS_LOST); hx::fishTension(0.f, 0.f, false); hx::fishSnap(); sfxFish(FISH_SNAP, 0.f); break; }
             if (s_slack > F.slackGrace * (0.6f + 0.4f * sta) + 0.6f * (1.f - sta)) { V.lostWhy = 2; enter(FS_LOST); hx::fishTension(0.f, 0.f, false); sfxFish(FISH_MISS, 0.f); break; }
             if (s_fightT > 120.f) { V.lostWhy = 2; enter(FS_LOST); hx::fishTension(0.f, 0.f, false); sfxFish(FISH_MISS, 0.f); break; }   // left to its own devices, it works free
-            if (V.lineOut < 1.2f) { enter(FS_LANDED); hx::fishTension(0.f, 0.f, false); hx::swell(); sfxFish(FISH_LANDED, 0.f); }
+            if (V.lineOut <= V.shoreZ + 0.4f) {                         // brought to the water's edge
+                enter(FS_LANDED); hx::fishTension(0.f, 0.f, false); hx::swell(); sfxFish(FISH_LANDED, 0.f);
+            }
         } break;
         case FS_LANDED:
             if (V.t > 5.f) enter(FS_STOW);                              // admire it, let it go, rod away

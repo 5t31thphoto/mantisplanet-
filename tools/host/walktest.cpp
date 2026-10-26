@@ -181,10 +181,10 @@ int main(int argc, char** argv) {
     printf(")\n");
     check(seen[B_JAPAN] > 0 && no <= 5, "heading east through three biomes: the Japanese garden");
     {   // every direction with a special biome brings it
-      const int OCT[7] = {0, 2, 3, 4, 5, 6, 7};
-      const uint8_t SPEC[7] = {B_JAPAN, B_TUNDRA, B_REDWOODS, B_COAST, B_CANYON, B_RAINFOREST, B_KARST};
+      const int OCT[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+      const uint8_t SPEC[8] = {B_JAPAN, B_KARST, B_RAINFOREST, B_CANYON, B_COAST, B_REDWOODS, B_TUNDRA, B_GROVE};
       bool all = true;
-      for (int k = 0; k < 7; k++) {
+      for (int k = 0; k < 8; k++) {
         journeyInit(777u + seed * 31u + k, 0.f);
         float Dk = 0.f; bool got = false; int nk = 0; uint8_t lk = 255;
         for (int st = 0; st < 60000 && !got && nk < 12; st++) {
@@ -196,13 +196,13 @@ int main(int argc, char** argv) {
         }
         if (!got || nk > 5) { all = false; printf("  (octant %d did not reach its special)\n", OCT[k]); }
       }
-      check(all, "all seven special directions arrive after three biomes");
+      check(all, "all eight special directions arrive after three biomes");
     }
     {   // and southwest brings the canyon
       journeyInit(4321u + seed, 0.f);
       float D2 = 0.f; bool canyon = false; int n2 = 0; uint8_t l2 = 255;
       for (int st = 0; st < 60000 && !canyon && n2 < 12; st++) {
-        float yaw = -2.356f + 0.25f * sinf(st * 0.01f);
+        float yaw = 2.356f + 0.25f * sinf(st * 0.01f);                     // southwest
         journeyUpdate(D2, yaw, 0.5f); D2 += 0.5f;
         uint8_t b = biomeIdAt(D2);
         if (b != l2) { n2++; l2 = b; }

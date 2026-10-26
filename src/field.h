@@ -25,6 +25,10 @@ struct FieldObj {
 };
 
 enum : uint8_t { CR_DEER, CR_RABBIT, CR_BIRDS, CR_BUTTERFLY, CR_DUCK, CR_BEAVER, CR_SQUIRREL, CR_KOI, CR_LIZARD, CR_KINDS };
+// Deer moods. All deer: graze, alert, walk, approach (if you hold still). Does also: stomp (suspicious, tail
+// up), sniff (close, nose out), show (turned away: the white rump, the tail flicking and flagging), nurse (a
+// fawn tucked under her), pet (you tapped her: her nose to your hand).
+enum : uint8_t { DEER_GRAZE, DEER_ALERT, DEER_WALK, DEER_STOMP, DEER_SNIFF, DEER_NURSE, DEER_APPROACH, DEER_SHOW, DEER_PET };
 struct FieldCritter {
     bool on;
     uint8_t kind;
@@ -38,6 +42,11 @@ struct FieldCritter {
     uint32_t seed;
     float splashT;     // beaver: time of the plunge (for the ring on the water)
     uint8_t variant;   // 1: the north / marsh version; 2: the garden's; 3: the canyon's (mule deer, jackrabbit, roadrunner)
+    uint8_t sex;       // deer: 0 doe, 1 buck, 2 fawn
+    uint8_t mood;      // deer: see DEER_* below
+    bool awayFlee;     // fleeing straight away from you (seen from behind), not across
+    float moodT;       // seconds left in this mood
+    int8_t mom;        // a fawn: its mother's slot (-1: none)
 };
 constexpr int CRIT_N = 6;
 
@@ -62,6 +71,7 @@ void fieldBolt(int i, uint8_t& kind, float& dist);
 
 const FieldObj*     fieldObjects();
 const FieldCritter* fieldCritters();     // CRIT_N slots
+bool fieldTryPet();                      // a tap with a doe close in front of you, while you're still: she reaches to your hand
 const Firefly*      fieldFireflies();
 float               rockFieldAt(float angle, float D);
 float               fieldNearestFalls();      // metres to the nearest waterfall (999 if none)

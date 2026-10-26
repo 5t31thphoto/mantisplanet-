@@ -24,6 +24,7 @@ struct FishView {
     bool biting;          // the strike window is open
     float lineOut;        // fight: metres of line out
     float fishAng;        // fight: where the fish is (world azimuth)
+    float shoreZ;         // fight: where the water begins along the fish's bearing (m); it's landed there
     float tension;        // 0..1.5
     float breakRisk;      // 0..1
     float stamina;        // 0..1 fish strength left
@@ -44,6 +45,7 @@ const FishView& fishingView();
 const FishSpec& fishingSpec();                            // the fish on the line (species, name, size)
 void fishingForceBite();                                  // tests
 void fishingTestFight(uint8_t tier, float lineOut, float yaw, uint32_t seed);
+bool fishingWaterAt(float angle, float D);          // is there water here (lake, sea, creek, terrace, ice)
 void fishingTune(int tier, float strength, float stamina, float runRate, float runPow, float ka, float kb, float kbreak);
 
 }

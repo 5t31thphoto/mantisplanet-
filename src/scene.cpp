@@ -34,7 +34,7 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     float clock = dayClock(t, distance);
     s.tod = clock - floorf(clock);
     s.sunElev = sunElevation(s.tod);
-    s.sunAz = -(s.tod - 0.245f) * kTau;                       // east at sunrise, south at noon, west at sunset
+    s.sunAz = AZ_EAST + (s.tod - 0.245f) * kTau;              // east at sunrise, through the south at noon, west at sunset; left to right as you face it
     const BiomeParams& here = biomeAt(distance);
     s.daySeed = hash32((uint32_t)floorf(clock) ^ worldSeed());
 

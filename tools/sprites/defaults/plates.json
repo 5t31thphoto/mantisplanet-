@@ -1,0 +1,1 @@
+{"about": "Noon backgrounds (320 x 240) for previews. A creature at distance d stands at screen y = 2 * (horizon + zk / d), x = 160; game pixels are drawn 2 x 2.", "horizon": 70, "zk": 203.636, "plates": ["meadow", "forest", "lakes", "highlands", "falls", "autumn", "marsh", "birch", "taiga", "garden", "canyon", "redwoods", "coast", "karst", "tundra", "rainforest", "grove"]}

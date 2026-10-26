@@ -4,7 +4,14 @@
 #include <vector>
 struct Vec3 { float x, y, z; };
 struct ImuData { Vec3 accel; Vec3 gyro; };
-struct HostDisplay { void setRotation(int) {} void setBrightness(int) {} };
+namespace lgfx {                                   // just enough of LovyanGFX for the device-path syntax check
+struct swap565_t { uint8_t h, l; };
+struct Bus_SPI { struct config_t { uint32_t freq_write = 40000000; } c; const config_t& config() const { return c; } void config(const config_t& v) { c = v; } bool init() { return true; } };
+}
+struct HostPanel { void* getBus() { return nullptr; } };
+struct HostDisplay { void setRotation(int) {} void setBrightness(int) {} void startWrite() {} void endWrite() {} void waitDMA() {}
+  HostPanel* getPanel() { return nullptr; }
+  template <class T> void pushImageDMA(int, int, int, int, const T*) {} };
 class M5Canvas;
 extern M5Canvas* g_hostLastCanvas;   // last canvas whose buffer was handed out
 class M5Canvas {
@@ -23,12 +30,21 @@ class M5Canvas {
   int w_ = 0, h_ = 0, depth_ = 16;
   std::vector<uint16_t> buf_;
 };
+namespace m5 {                                    // (signatures as in M5Unified's IMU_Class.hpp / MPU6886_Class)
+enum imu_t { imu_none, imu_unknown, imu_sh200q, imu_mpu6050, imu_mpu6886, imu_mpu9250, imu_bmi270 };
+struct IMU_Base { virtual ~IMU_Base() {} };
+struct MPU6886_Class : IMU_Base { enum Fodr { ODR_1kHz = 0, ODR_500Hz = 1 }; void enableFIFO(Fodr) {} };
+}
 struct HostImu {
   ImuData data{{0, 0, 1}, {0, 0, 0}};
+  float tempC = 30.f;                              // tests can warm the chip up
   bool isEnabled() { return true; }
   bool loadOffsetFromNVS() { return true; }
   bool update() { return true; }
   ImuData getImuData() { return data; }
+  bool getTemp(float* t) { *t = tempC; return true; }
+  m5::imu_t getType() const { return m5::imu_mpu6886; }
+  m5::IMU_Base* getImuInstancePtr(int) const { return nullptr; }
 };
 struct HostPower { int last = 0; long changes = 0; void setVibration(int v) { if (v != last) changes++; last = v; } };
 struct HostSpkCfg { uint8_t task_priority = 2; uint8_t task_pinned_core = 255; size_t dma_buf_len = 256; size_t dma_buf_count = 8; };
@@ -49,7 +65,7 @@ struct HostTouch {
 };
 struct HostRtcDT { struct { int year = 2026, month = 10, date = 19; } date; struct { int hours = 18, minutes = 40; } time; };
 struct HostRtc { HostRtcDT getDateTime() { return HostRtcDT(); } };
-struct HostBtn { bool wasPressed() { return false; } };
+struct HostBtn { bool wasPressed() { return false; } bool wasClicked() { return false; } bool wasHold() { return false; } };
 struct HostCfg { bool output_power = false, internal_imu = false, internal_mic = false, internal_spk = false; };
 struct M5Class {
   HostDisplay Display; HostImu Imu; HostPower Power; HostSpeaker Speaker; HostTouch Touch; HostBtn BtnA, BtnB, BtnC; HostRtc Rtc;

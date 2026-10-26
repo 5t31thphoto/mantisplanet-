@@ -15,6 +15,7 @@ M5Canvas* g_hostLastCanvas = nullptr;
 #include "../../src/universe.h"
 #include "../../src/audio.h"
 #include "../../src/scene.h"
+#include "../../src/display.h"
 #include <vector>
 static std::vector<int16_t> g_wav;      // everything the speaker would have played
 static bool g_recordAudio = false;
@@ -71,16 +72,14 @@ static void frameImu(float ax, float ay, float az, float gx, float gy, float gz,
   while (g_audioDebt >= 256.0) { mantis::audioRender(blk, 256); g_audioDebt -= 256.0; }
 }
 
-static void writePNGish(const char* path) {   // PPM; tools/host/render.py turns these into PNGs
-  M5Canvas* c = g_hostLastCanvas;
-  if (!c) return;
+static void writePNGish(const char* path) {   // PPM of exactly what the screen shows (frame, palette, overlay); tools/host/render.py turns these into PNGs
   FILE* f = fopen(path, "wb");
-  fprintf(f, "P6 %d %d 255\n", c->width(), c->height());
-  const uint16_t* p = c->pixels();
-  for (int i = 0; i < c->width() * c->height(); i++) {
-    uint16_t v = (uint16_t)((p[i] >> 8) | (p[i] << 8));    // panel byte order -> RGB565
-    unsigned char rgb[3] = {(unsigned char)(((v >> 11) & 31) * 255 / 31), (unsigned char)(((v >> 5) & 63) * 255 / 63), (unsigned char)((v & 31) * 255 / 31)};
-    fwrite(rgb, 1, 3, f);
+  if (!f) return;
+  fprintf(f, "P6 320 240 255\n");
+  uint16_t row[320];
+  for (int y = 0; y < 240; y++) {
+    mantis::compositeRow(y, row);
+    for (int x = 0; x < 320; x++) { uint16_t v = row[x]; unsigned char c[3] = {(unsigned char)((v >> 11) << 3), (unsigned char)(((v >> 5) & 63) << 2), (unsigned char)((v & 31) << 3)}; fwrite(c, 1, 3, f); }
   }
   fclose(f);
 }

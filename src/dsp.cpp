@@ -1,4 +1,5 @@
 #include "dsp.h"
+#include "mem.h"
 #include <stdlib.h>
 #include <string.h>
 #ifndef HOST
@@ -7,9 +8,10 @@
 
 namespace dsp {
 
-float SINE[1025];
+float* SINE = nullptr;                    // 1025 entries, made at init in internal RAM (static RAM is tight)
 
 void init() {
+    if (!SINE) SINE = (float*)mantis::memFast(1025 * sizeof(float));
     for (int i = 0; i <= 1024; i++) SINE[i] = sinf(TWO_PI_F * i / 1024.f);
 }
 

@@ -226,7 +226,9 @@ float fieldStep(float yaw, float ds, float distance, bool* bumped) {
     return moved;
 }
 
+static float s_petYaw = 0.f;
 int fieldTick(float yaw, float distance, float t, float dt, float speed, float stillFor) {
+    s_petYaw = yaw;
     // fireflies drift a little on their own
     for (int i = 0; i < FIREFLY_N; i++) {
         Firefly& f = s_ff[i];
@@ -277,6 +279,8 @@ int fieldTick(float yaw, float distance, float t, float dt, float speed, float s
         if (bv.tropical > 0.5f && kind == CR_BUTTERFLY) c->variant = 3;                   // blue morphos
         if (bv.tropical > 0.5f && kind == CR_BIRDS) c->variant = 6;                       // parrots
         if (bv.stag > 0.5f && kind == CR_DEER && (g_scene.tod > 0.7f || g_scene.tod < 0.25f) && frand() < 0.3f) c->variant = 7;   // the white stag
+        c->mom = -1; c->mood = DEER_GRAZE; c->moodT = 2.f + frand() * 5.f; c->awayFlee = false;
+        c->sex = kind != CR_DEER ? 0 : c->variant == 7 ? 1 : frand() < 0.15f ? 1 : 0;   // mostly does; bucks less often
     };
     for (uint8_t kind = 0; kind < CR_KINDS; kind++) {
         if (t < s_nextKind[kind]) continue;
@@ -293,6 +297,16 @@ int fieldTick(float yaw, float distance, float t, float dt, float speed, float s
             begin(c, trop ? (k < 0.55f ? CR_BIRDS : CR_RABBIT) : k < 0.45f ? CR_DEER : (k < 0.8f ? CR_RABBIT : CR_BIRDS), a, r);
             c->idleT = still ? 10.f + frand() * 14.f : 1.8f + frand() * 2.5f;
             s_nextKind[CR_DEER] = s_nextKind[CR_RABBIT] = s_nextKind[CR_BIRDS] = t + 4.f + frand() * 8.f;
+            if (c->kind == CR_DEER && c->sex == 0 && c->variant != 5 && frand() < 0.45f) {   // a doe, often with her fawn beside her
+                if (FieldCritter* f = freeSlot()) {
+                    *f = *c;
+                    f->sex = 2; f->mom = (int8_t)(c - s_cr);
+                    float ox = -sinf(a) * 0.9f, oy = cosf(a) * 0.9f;              // beside her, across the line of sight
+                    float side = frand() < 0.5f ? -1.f : 1.f;
+                    f->x += ox * side; f->y += oy * side;
+                    f->seed = hash32(c->seed ^ 0xFA3Du);
+                }
+            }
         } else if (kind == CR_LIZARD) {                            // sun-warmed rock and sand
             if (biomeAt(distance).desert < 0.5f || count(CR_LIZARD) >= 2 || !day) continue;
             float r = still ? 3.f + frand() * 3.f : 4.f + frand() * 6.f;
@@ -352,10 +366,67 @@ int fieldTick(float yaw, float distance, float t, float dt, float speed, float s
         float e = t - c.t0;
         float d = sqrtf(c.x * c.x + c.y * c.y);
         float spookR = c.kind == CR_DUCK ? 9.f : c.kind == CR_BUTTERFLY ? 2.5f : c.kind == CR_BEAVER ? 8.f : c.kind == CR_LIZARD ? 3.5f : 7.f;
-        bool spooked = speed > 0.05f && d < spookR && c.kind != CR_KOI;
+        bool spooked = speed > 0.05f && d < spookR && c.kind != CR_KOI;   // (a fawn also bolts with its mother)
+        if (c.kind == CR_DEER && c.mom >= 0) {                     // a fawn does what its mother does
+            const FieldCritter& m = s_cr[c.mom];
+            if (!m.on || m.kind != CR_DEER) c.mom = -1;
+            else {
+                c.mood = (m.mood == DEER_PET || m.mood == DEER_SNIFF || m.mood == DEER_SHOW) ? (uint8_t)DEER_GRAZE : m.mood; c.moodT = m.moodT;
+                if (m.fleeing && !c.fleeing) { spooked = true; c.dir = m.dir; c.awayFlee = m.awayFlee; }
+                if (!c.fleeing) {                                   // keep beside her; under her belly when nursing
+                    float tx = m.x, ty = m.y, md = sqrtf(m.x * m.x + m.y * m.y) + 1e-3f;
+                    if (m.mood == DEER_NURSE) { tx += m.x / md * 0.35f; ty += m.y / md * 0.35f; }
+                    else { tx += -m.y / md * 0.9f; ty += m.x / md * 0.9f; }
+                    float dx = tx - c.x, dy = ty - c.y, dl = sqrtf(dx * dx + dy * dy);
+                    if (dl > 0.15f) { float sp = fminf(dl, 0.9f * dt); c.x += dx / dl * sp; c.y += dy / dl * sp; }
+                    c.faceRight = m.faceRight;
+                }
+            }
+        }
+        if (c.kind == CR_DEER && !c.fleeing && c.variant != 7 && c.mom < 0) {
+            bool buck = c.sex == 1;
+            bool hasFawn = false;
+            for (int j = 0; j < CRIT_N; j++) if (s_cr[j].on && s_cr[j].mom == i) hasFawn = true;
+            bool calm = stillFor > 4.f && speed < 0.05f;
+            float comfort = buck ? 6.f : hasFawn ? 3.5f : 2.0f;           // how close she'll come: a lone doe, closest
+            c.moodT -= dt;
+            if (speed > 0.05f && d < 15.f) {                              // you're moving nearby
+                if (c.mood != DEER_ALERT && c.mood != DEER_STOMP) {
+                    c.mood = (!buck && d < 11.f && frand() < 0.55f) ? DEER_STOMP : DEER_ALERT;   // a doe stamps and bobs, tail up
+                    c.moodT = 1.5f + frand() * 2.f;
+                }
+            } else if (c.mood == DEER_APPROACH) {
+                if (!calm) { c.mood = DEER_ALERT; c.moodT = 2.f; }
+                else if (d > comfort && d > 0.01f) {                         // unhurried steps toward you
+                    c.x -= c.x / d * 0.45f * dt; c.y -= c.y / d * 0.45f * dt;
+                    float side = -c.y * cosf(yaw) + c.x * sinf(yaw);
+                    c.faceRight = side < 0.f;
+                } else { c.mood = (!buck && !hasFawn) ? DEER_SNIFF : DEER_GRAZE; c.moodT = 4.f + frand() * 4.f; }
+            } else if (calm && d > comfort + 0.6f && frand() < dt * (buck ? 0.08f : 0.35f)) {
+                c.mood = DEER_APPROACH; c.moodT = 8.f;                    // you've been still: she comes closer
+            } else if (c.mood == DEER_PET) {
+                if (c.moodT <= 0.f) { c.mood = DEER_SNIFF; c.moodT = 3.f; }
+            } else if (c.moodT <= 0.f) {
+                float k = frand();
+                if (!buck && calm && d < comfort + 1.5f) {                    // a doe at ease near you
+                    c.mood = k < 0.3f ? DEER_SNIFF : k < 0.48f ? DEER_SHOW : k < 0.78f ? DEER_GRAZE : DEER_ALERT;
+                    if (hasFawn && k > 0.85f) c.mood = DEER_NURSE;
+                } else if (!buck && hasFawn && k < 0.15f) c.mood = DEER_NURSE;
+                else if (!buck && k < 0.1f) c.mood = DEER_SHOW;
+                else c.mood = k < 0.55f ? DEER_GRAZE : (k < 0.8f ? DEER_ALERT : DEER_WALK);
+                c.moodT = c.mood == DEER_GRAZE ? 3.f + frand() * 5.f : c.mood == DEER_NURSE ? 5.f + frand() * 4.f : c.mood == DEER_SHOW ? 3.f + frand() * 2.f : 1.5f + frand() * 2.f;
+                if (c.mood == DEER_WALK) c.faceRight = frand() < 0.5f;
+            }
+            if (c.mood == DEER_WALK && d > 0.01f) {                       // a few steps across your view
+                float px = -c.y / d * (c.faceRight ? 1.f : -1.f), py = c.x / d * (c.faceRight ? 1.f : -1.f);
+                c.x += px * 0.6f * dt; c.y += py * 0.6f * dt;
+            }
+            if (calm && !buck && d < 9.f) c.idleT = fmaxf(c.idleT, e + 6.f);   // while you're still, a doe near you stays
+        }
         if (!c.fleeing && (spooked || e > c.idleT)) {
             c.fleeing = true;
             c.fleeT = 0.f;
+            if (c.kind == CR_DEER && c.mom < 0) c.awayFlee = frand() < 0.5f;   // often they turn and run straight away
             if (e < c.idleT) c.idleT = e;
             if (c.kind != CR_BUTTERFLY && c.kind != CR_KOI && c.kind != CR_LIZARD && s_nBolts < CRIT_N) { s_bolts[s_nBolts].kind = (uint8_t)(c.kind | (c.variant << 4)); s_bolts[s_nBolts].dist = d; s_nBolts++; }
         }
@@ -416,7 +487,10 @@ int fieldTick(float yaw, float distance, float t, float dt, float speed, float s
                 }
                 // fall through
             default:                                                 // deer, rabbits, birds: skitter across the line of sight
-                if (c.fleeing && d > 0.01f) {
+                if (c.fleeing && d > 0.01f && c.kind == CR_DEER && c.awayFlee) {   // bounding straight away, rump and flag toward you
+                    float sp = 2.2f + fe * 4.f;
+                    c.x += c.x / d * sp * dt; c.y += c.y / d * sp * dt;
+                } else if (c.fleeing && d > 0.01f) {
                     float sp = (c.kind == CR_BIRDS ? 1.5f : 2.2f) + fe * (c.kind == CR_DEER ? 4.f : 3.f);
                     float px = -c.y / d * c.dir, py = c.x / d * c.dir;
                     c.x += (px * 0.9f + c.x / d * 0.35f) * sp * dt;
@@ -438,6 +512,16 @@ int fieldTick(float yaw, float distance, float t, float dt, float speed, float s
 void fieldBolt(int i, uint8_t& kind, float& dist) { kind = s_bolts[i].kind; dist = s_bolts[i].dist; }
 
 const FieldObj*     fieldObjects() { return s_obj; }
+bool fieldTryPet() {
+    for (int i = 0; i < CRIT_N; i++) {
+        FieldCritter& c = s_cr[i];
+        if (!c.on || c.kind != CR_DEER || c.fleeing || c.sex == 1 || c.variant == 7) continue;
+        float d = sqrtf(c.x * c.x + c.y * c.y);
+        float rel = wrapPi(atan2f(c.y, c.x) - s_petYaw);
+        if (d < 3.2f && fabsf(rel) < 0.4f) { c.mood = DEER_PET; c.moodT = 3.f; c.idleT += 8.f; return true; }
+    }
+    return false;
+}
 const FieldCritter* fieldCritters() { return s_cr; }
 const Firefly*      fieldFireflies() { return s_ff; }
 float fieldNearestFalls() {

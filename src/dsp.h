@@ -10,7 +10,7 @@ constexpr float SR = 24000.f;
 constexpr float INV_SR = 1.f / 24000.f;
 constexpr float TWO_PI_F = 6.28318531f;
 
-extern float SINE[1025];
+extern float* SINE;                       // 1025 entries (made by init())
 void init();
 // Runtime buffer: internal RAM if there's room, else PSRAM; zeroed. Keeps big buffers out of .bss.
 void* allocFast(size_t bytes);

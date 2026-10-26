@@ -6,7 +6,7 @@
 // through three ordinary biomes and the next is that direction's special biome. After a special, it
 // loops back to a random ordinary one. Nothing is stored beyond the journey you're on.
 //
-// Compass (world azimuth): east = 0, north = +pi/2, west = pi, south = -pi/2. The sun rises in the east.
+// Compass (world azimuth): east = 0, south = +pi/2, west = pi, north = -pi/2 (bearings grow to your right). The sun rises in the east.
 
 namespace mantis {
 
@@ -85,6 +85,9 @@ float biomeStart(float D);     // where the biome containing D begins
 void journeyForce(float D, uint8_t b);   // previews / tests
 uint32_t journeyGeneration();          // bumps whenever the biome plan changes (for caches)
 int journeyStreak();          // how many biomes in a row you've held the current heading
-int journeyOctant();          // 0 = E, 1 = NE, 2 = N, 3 = NW, 4 = W, 5 = SW, 6 = S, 7 = SE
+int journeyOctant();          // 0 = E, 1 = SE, 2 = S, 3 = SW, 4 = W, 5 = NW, 6 = N, 7 = NE
+// planet mods: the address of one biome ramp colour (3 floats, 0..255); call ColoursChanged after editing
+float* journeyRampSlot(int biome, const char* ramp, int shade);
+void journeyColoursChanged();
 
 }

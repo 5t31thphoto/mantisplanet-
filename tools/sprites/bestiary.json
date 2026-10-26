@@ -1,0 +1,900 @@
+{
+ "about": "MantisPlanet bestiary: every creature the game draws, the art it takes and at what sizes. The game and Mantis Sprite Studio both read this (tools/sprites/gen_bestiary.py makes src/bestiary_gen.h). Sizes are game pixels (the screen shows them doubled). Draw facing RIGHT; the game mirrors. Colours: the 32-colour creature palette (creature_palette.gpl); transparent = clear. Markers (one pixel, removed on import): pure magenta #FF00FF = the head, where antlers sit (deer bodies) or a part's attach point (antlers, tails); pure cyan #00FFFF = the tail root (deer bodies).",
+ "tiers": [
+  "far",
+  "mid",
+  "near"
+ ],
+ "creatures": [
+  {
+   "id": "deer",
+   "name": "Deer",
+   "kind": 0,
+   "variant": 0,
+   "where": "meadow, forest, birch, autumn, highlands",
+   "parts": "deer",
+   "desc": "One neutral deer, drawn as parts. The game builds the doe (fuller hips), the buck (heavier shoulders + antlers), the fawn (60% + spots) and the caribou cow (doe + antlers) from it, and every deer species is a recolour of it. Bodies are drawn WITHOUT a tail: the tail is its own part, so a doe can flag, flick or rest it on any pose.",
+   "assets": [
+    {
+     "part": "body",
+     "anim": "stand",
+     "frames": 1,
+     "markers": "head, tail",
+     "note": "standing at ease, head level"
+    },
+    {
+     "part": "body",
+     "anim": "walk",
+     "frames": 4,
+     "markers": "head, tail",
+     "note": "an unhurried walk cycle (also her approach toward you)"
+    },
+    {
+     "part": "body",
+     "anim": "bound",
+     "frames": 4,
+     "markers": "head, tail",
+     "note": "bounding away across your view"
+    },
+    {
+     "part": "body",
+     "anim": "graze",
+     "frames": 2,
+     "markers": "head, tail",
+     "note": "head down to the grass; frame 2 a small chew"
+    },
+    {
+     "part": "body",
+     "anim": "alert",
+     "frames": 1,
+     "markers": "head, tail",
+     "note": "head high, ears forward"
+    },
+    {
+     "part": "body",
+     "anim": "stomp",
+     "frames": 2,
+     "markers": "head, tail",
+     "note": "a doe's warning: a forefoot raised (1), stamped down (2), head bobbing"
+    },
+    {
+     "part": "body",
+     "anim": "sniff",
+     "frames": 1,
+     "markers": "head, tail",
+     "note": "neck stretched toward you, nose out (and the pet)"
+    },
+    {
+     "part": "body",
+     "anim": "nurse",
+     "frames": 1,
+     "markers": "head, tail",
+     "note": "the FAWN's nursing pose (head up under a belly), drawn at adult size: the game shrinks it"
+    },
+    {
+     "part": "body",
+     "anim": "away",
+     "frames": 2,
+     "markers": "head, tail",
+     "note": "seen from BEHIND: running straight away (and a doe turned away showing her rump)"
+    },
+    {
+     "part": "antlers",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "the buck's antlers, side view"
+    },
+    {
+     "part": "antlers_away",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "the antlers seen from behind"
+    },
+    {
+     "part": "tail_down",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "tail at rest (side)"
+    },
+    {
+     "part": "tail_flag",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "tail raised, white underside flashing (side): the doe's alarm flag"
+    },
+    {
+     "part": "tail_flick",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "a relaxed flick (side)"
+    },
+    {
+     "part": "tail_away_down",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "tail at rest, seen from behind"
+    },
+    {
+     "part": "tail_away_flag",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "the flag from behind: the big white fan"
+    },
+    {
+     "part": "tail_away_flick",
+     "anim": "",
+     "frames": 1,
+     "markers": "attach",
+     "note": "a flick, from behind"
+    }
+   ],
+   "sizes": {
+    "far": [
+     12,
+     11
+    ],
+    "mid": [
+     24,
+     22
+    ],
+    "near": [
+     46,
+     44
+    ]
+   },
+   "part_sizes": {
+    "antlers": {
+     "far": [
+      6,
+      3
+     ],
+     "mid": [
+      10,
+      6
+     ],
+     "near": [
+      20,
+      12
+     ]
+    },
+    "antlers_away": {
+     "far": [
+      5,
+      3
+     ],
+     "mid": [
+      10,
+      6
+     ],
+     "near": [
+      20,
+      12
+     ]
+    },
+    "tail": {
+     "far": [
+      2,
+      2
+     ],
+     "mid": [
+      4,
+      5
+     ],
+     "near": [
+      8,
+      10
+     ]
+    },
+    "tail_away": {
+     "far": [
+      3,
+      3
+     ],
+     "mid": [
+      7,
+      6
+     ],
+     "near": [
+      14,
+      12
+     ]
+    }
+   }
+  },
+  {
+   "id": "sika",
+   "name": "Sika deer",
+   "kind": 0,
+   "variant": 2,
+   "where": "Japanese garden (bows to you)",
+   "recolour_of": "deer",
+   "desc": "The deer art, recoloured: light coat tones become white spots."
+  },
+  {
+   "id": "mule_deer",
+   "name": "Mule deer",
+   "kind": 0,
+   "variant": 3,
+   "where": "red rock canyon",
+   "recolour_of": "deer",
+   "desc": "The deer art in greyer coat tones."
+  },
+  {
+   "id": "elk",
+   "name": "Elk",
+   "kind": 0,
+   "variant": 4,
+   "where": "ancient redwoods (stands taller)",
+   "recolour_of": "deer",
+   "desc": "The deer art, darker, drawn larger."
+  },
+  {
+   "id": "caribou",
+   "name": "Caribou",
+   "kind": 0,
+   "variant": 1,
+   "where": "snowy taiga",
+   "recolour_of": "deer",
+   "desc": "The deer art in pale caribou tones."
+  },
+  {
+   "id": "caribou_herd",
+   "name": "Caribou herd",
+   "kind": 0,
+   "variant": 5,
+   "where": "frozen tundra (all with antlers: cows grow them too)",
+   "recolour_of": "deer",
+   "desc": "Several caribou moving together: the buck art in caribou tones."
+  },
+  {
+   "id": "white_stag",
+   "name": "The white stag",
+   "kind": 0,
+   "variant": 7,
+   "where": "moonlit grove, at dusk and night (rare)",
+   "recolour_of": "deer",
+   "desc": "The buck, white and glowing."
+  },
+  {
+   "id": "rabbit",
+   "name": "Rabbit",
+   "kind": 1,
+   "variant": 0,
+   "where": "meadow, forest",
+   "h_m": 0.5,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "sitting; frame 2 an ear twitch"
+    },
+    {
+     "anim": "move",
+     "frames": 3,
+     "note": "hopping away, white tail flashing"
+    }
+   ],
+   "sizes": {
+    "far": [
+     5,
+     4
+    ],
+    "mid": [
+     10,
+     8
+    ],
+    "near": [
+     20,
+     16
+    ]
+   }
+  },
+  {
+   "id": "white_hare",
+   "name": "White hare",
+   "kind": 1,
+   "variant": 1,
+   "where": "taiga, tundra edges",
+   "h_m": 0.5,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "sitting"
+    },
+    {
+     "anim": "move",
+     "frames": 3,
+     "note": "hopping"
+    }
+   ],
+   "sizes": {
+    "far": [
+     5,
+     4
+    ],
+    "mid": [
+     10,
+     8
+    ],
+    "near": [
+     20,
+     16
+    ]
+   }
+  },
+  {
+   "id": "jackrabbit",
+   "name": "Jackrabbit",
+   "kind": 1,
+   "variant": 3,
+   "where": "red rock canyon",
+   "h_m": 0.5,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "sitting, huge ears"
+    },
+    {
+     "anim": "move",
+     "frames": 3,
+     "note": "long bounds"
+    }
+   ],
+   "sizes": {
+    "far": [
+     5,
+     4
+    ],
+    "mid": [
+     10,
+     8
+    ],
+    "near": [
+     20,
+     16
+    ]
+   }
+  },
+  {
+   "id": "arctic_fox",
+   "name": "Arctic fox",
+   "kind": 1,
+   "variant": 5,
+   "where": "frozen tundra",
+   "h_m": 0.31,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "standing, tail curled"
+    },
+    {
+     "anim": "move",
+     "frames": 4,
+     "note": "trotting"
+    }
+   ],
+   "sizes": {
+    "far": [
+     5,
+     3
+    ],
+    "mid": [
+     10,
+     5
+    ],
+    "near": [
+     20,
+     10
+    ]
+   }
+  },
+  {
+   "id": "songbirds",
+   "name": "Songbirds",
+   "kind": 2,
+   "variant": 0,
+   "where": "most biomes",
+   "flock": true,
+   "h_m": 0.1,
+   "desc": "One small bird; the game draws the whole flock from it. (Leave empty to keep today's flock.)",
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "a bird on the ground"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "wings up, wings down"
+    }
+   ],
+   "sizes": {
+    "mid": [
+     5,
+     3
+    ]
+   }
+  },
+  {
+   "id": "roadrunner",
+   "name": "Roadrunner",
+   "kind": 2,
+   "variant": 3,
+   "where": "red rock canyon",
+   "h_m": 0.37,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "standing, crest up"
+    },
+    {
+     "anim": "move",
+     "frames": 4,
+     "note": "sprinting"
+    }
+   ],
+   "sizes": {
+    "far": [
+     4,
+     3
+    ],
+    "mid": [
+     8,
+     6
+    ],
+    "near": [
+     16,
+     12
+    ]
+   }
+  },
+  {
+   "id": "snowy_owl",
+   "name": "Snowy owl",
+   "kind": 2,
+   "variant": 5,
+   "where": "frozen tundra",
+   "h_m": 0.31,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "perched on a rock"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "slow wingbeats"
+    }
+   ],
+   "sizes": {
+    "far": [
+     3,
+     3
+    ],
+    "mid": [
+     4,
+     5
+    ],
+    "near": [
+     8,
+     10
+    ]
+   }
+  },
+  {
+   "id": "parrots",
+   "name": "Parrots",
+   "kind": 2,
+   "variant": 6,
+   "where": "rainforest",
+   "flock": true,
+   "h_m": 0.1,
+   "desc": "One parrot; the game draws the flock from it.",
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "perched"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "wings up, wings down"
+    }
+   ],
+   "sizes": {
+    "mid": [
+     6,
+     4
+    ]
+   }
+  },
+  {
+   "id": "butterfly",
+   "name": "Butterfly",
+   "kind": 3,
+   "variant": 0,
+   "where": "meadow, garden",
+   "h_m": 0.09,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "wings open, wings shut"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "flying"
+    }
+   ],
+   "sizes": {
+    "far": [
+     2,
+     1
+    ],
+    "mid": [
+     3,
+     2
+    ],
+    "near": [
+     5,
+     3
+    ]
+   }
+  },
+  {
+   "id": "dragonfly",
+   "name": "Dragonfly",
+   "kind": 3,
+   "variant": 1,
+   "where": "marsh",
+   "h_m": 0.09,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "hovering"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "darting"
+    }
+   ],
+   "sizes": {
+    "mid": [
+     3,
+     3
+    ]
+   }
+  },
+  {
+   "id": "kingfisher",
+   "name": "Kingfisher",
+   "kind": 3,
+   "variant": 2,
+   "where": "Japanese garden, karst",
+   "h_m": 0.06,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "perched"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "a dart low over the water"
+    }
+   ],
+   "sizes": {
+    "mid": [
+     4,
+     3
+    ]
+   }
+  },
+  {
+   "id": "blue_morpho",
+   "name": "Blue morpho",
+   "kind": 3,
+   "variant": 3,
+   "where": "rainforest",
+   "h_m": 0.09,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "wings open, shut"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "flying"
+    }
+   ],
+   "sizes": {
+    "mid": [
+     5,
+     3
+    ]
+   }
+  },
+  {
+   "id": "duck",
+   "name": "Duck",
+   "kind": 4,
+   "variant": 0,
+   "where": "lakes, marsh",
+   "h_m": 0.37,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "swimming"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "taking off"
+    }
+   ],
+   "sizes": {
+    "far": [
+     4,
+     4
+    ],
+    "mid": [
+     8,
+     7
+    ],
+    "near": [
+     14,
+     12
+    ]
+   }
+  },
+  {
+   "id": "heron",
+   "name": "Heron",
+   "kind": 4,
+   "variant": 1,
+   "where": "marsh",
+   "h_m": 0.62,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "standing still, S-neck"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "flying, neck tucked"
+    }
+   ],
+   "sizes": {
+    "far": [
+     3,
+     6
+    ],
+    "mid": [
+     6,
+     11
+    ],
+    "near": [
+     12,
+     22
+    ]
+   }
+  },
+  {
+   "id": "white_crane",
+   "name": "White crane",
+   "kind": 4,
+   "variant": 2,
+   "seed_odd": true,
+   "where": "Japanese garden, karst terraces",
+   "h_m": 0.62,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "standing"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "flying"
+    }
+   ],
+   "sizes": {
+    "far": [
+     3,
+     6
+    ],
+    "mid": [
+     6,
+     11
+    ],
+    "near": [
+     12,
+     22
+    ]
+   }
+  },
+  {
+   "id": "mandarin_duck",
+   "name": "Mandarin duck",
+   "kind": 4,
+   "variant": 2,
+   "seed_odd": false,
+   "where": "Japanese garden, karst",
+   "h_m": 0.37,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "swimming"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "taking off"
+    }
+   ],
+   "sizes": {
+    "far": [
+     4,
+     4
+    ],
+    "mid": [
+     8,
+     7
+    ],
+    "near": [
+     14,
+     12
+    ]
+   }
+  },
+  {
+   "id": "beaver",
+   "name": "Beaver",
+   "kind": 5,
+   "variant": 0,
+   "where": "lakes, waterfall country",
+   "h_m": 0.25,
+   "desc": "Make it read at a glance: the flat paddle tail, a round back, a light rim along the top.",
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "on the bank, paddle tail showing"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "plunging in"
+    }
+   ],
+   "sizes": {
+    "far": [
+     5,
+     2
+    ],
+    "mid": [
+     9,
+     4
+    ],
+    "near": [
+     18,
+     8
+    ]
+   }
+  },
+  {
+   "id": "squirrel",
+   "name": "Squirrel",
+   "kind": 6,
+   "variant": 0,
+   "where": "forest, autumn wood",
+   "h_m": 0.31,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "upright, big curled tail"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "running"
+    }
+   ],
+   "sizes": {
+    "far": [
+     3,
+     3
+    ],
+    "mid": [
+     6,
+     5
+    ],
+    "near": [
+     12,
+     10
+    ]
+   }
+  },
+  {
+   "id": "koi",
+   "name": "Koi",
+   "kind": 7,
+   "variant": 0,
+   "where": "garden ponds",
+   "h_m": 0.06,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 2,
+     "note": "swimming, tail sway"
+    }
+   ],
+   "sizes": {
+    "mid": [
+     5,
+     2
+    ]
+   }
+  },
+  {
+   "id": "lizard",
+   "name": "Lizard",
+   "kind": 8,
+   "variant": 0,
+   "where": "red rock canyon",
+   "h_m": 0.12,
+   "assets": [
+    {
+     "anim": "idle",
+     "frames": 1,
+     "note": "basking"
+    },
+    {
+     "anim": "move",
+     "frames": 2,
+     "note": "darting"
+    }
+   ],
+   "sizes": {
+    "far": [
+     4,
+     1
+    ],
+    "mid": [
+     7,
+     2
+    ],
+    "near": [
+     14,
+     4
+    ]
+   }
+  }
+ ]
+}

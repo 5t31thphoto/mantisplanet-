@@ -11,6 +11,7 @@
 #include "audio.h"
 #include "journey.h"
 #include "mem.h"
+#include "creatures.h"
 #include "fishing.h"
 #include "bugs.h"
 #include <math.h>
@@ -39,6 +40,12 @@ enum : uint8_t {
     R_GROUND = 96, R_LEAF = 112, R_BARK = 128, R_ACCENT = 144, R_WATER = 160
 };
 static constexpr int N_REFLECT = 96;   // ramps 0..5 have darkened water twins at R_WATER + i
+// The creatures' extra 16 colours live where the far mountains' water twins were: far peaks reflect with the
+// near mountains' twins instead. (So R_WATER.. is water, except this block.)
+static constexpr int R_FAUNA = 160 + 48;  // R_WATER + R_MTN_FAR
+static inline bool isWaterI(uint8_t p) { return p >= 160 && !(p >= R_FAUNA && p < R_FAUNA + 16); }
+static uint8_t s_farTwin[16] = {224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239};   // far peak -> the near twin of matching brightness
+static inline uint8_t reflIdx(uint8_t src) { return (uint8_t)(src >= 48 && src < 64 ? s_farTwin[src - 48] : 160 + src); }
 // HILLS / LEAF: 0..7 near, 8..15 same shades fogged for distance.
 // BARK: 0..7 bark, 8..15 stone (distant stone uses the near-mountain ramp).
 // GROUND: (depth bucket 0 near..7 far) * 2 + variation.
@@ -160,11 +167,12 @@ static const Key KEYS[] = {
     NIGHT_KEY(1.00f, -0.40f, 0.25f),
 };
 static constexpr int NKEYS = sizeof(KEYS) / sizeof(KEYS[0]);
+static const Key* g_keys = KEYS;            // a planet mod may point this at its own copy
 
 static Key sampleKey(float tod) {
     int k = 0;
-    while (k < NKEYS - 2 && tod >= KEYS[k + 1].t) k++;
-    const Key &A = KEYS[k], &B = KEYS[k + 1];
+    while (k < NKEYS - 2 && tod >= g_keys[k + 1].t) k++;
+    const Key &A = g_keys[k], &B = g_keys[k + 1];
     float t = clampf((tod - A.t) / (B.t - A.t), 0.f, 1.f);
     t = t * t * (3.f - 2.f * t);
     Key o;
@@ -190,9 +198,19 @@ static float colAng[W], sideCol[W], mistN[W];
 static float hFar[W + 2], hMid[W + 2], hHF[W + 2], hHN[W + 2];
 static int   xoffRow[H];
 
-static const C3 ROCK = {112, 98, 128}, ROCK2 = {88, 80, 102}, SNOW = {240, 240, 252};
-static const C3 HILL = {30, 66, 46}, GRASS = {78, 130, 50}, LEAF = {40, 102, 44}, BARK = {84, 56, 36};
-static const C3 WATER = {18, 40, 74}, STONE = {120, 118, 122};
+// The base colours: read-only defaults in flash, read through a pointer; a planet mod gets its own copy.
+struct BaseCols { C3 rock, rock2, snow, hill, grass, leaf, bark, water, stone; };
+static const BaseCols BASE_DEF = {{112, 98, 128}, {88, 80, 102}, {240, 240, 252}, {30, 66, 46}, {78, 130, 50}, {40, 102, 44}, {84, 56, 36}, {18, 40, 74}, {120, 118, 122}};
+static const BaseCols* g_base = &BASE_DEF;
+#define ROCK (g_base->rock)
+#define ROCK2 (g_base->rock2)
+#define SNOW (g_base->snow)
+#define HILL (g_base->hill)
+#define GRASS (g_base->grass)
+#define LEAF (g_base->leaf)
+#define BARK (g_base->bark)
+#define WATER (g_base->water)
+#define STONE (g_base->stone)
 // Artist ramps: shadows lean cool (teal, violet), highlights lean warm (lime, gold).
 struct Ramp4 { C3 k[4]; };
 static const Ramp4 LEAF_R  = {{{14, 44, 50}, {36, 92, 48}, {112, 166, 58}, {200, 218, 96}}};
@@ -203,6 +221,12 @@ static const Ramp4 STONE_R = {{{50, 50, 72}, {106, 102, 112}, {164, 158, 146}, {
 static const Ramp4 HILL_R  = {{{16, 42, 50}, {30, 66, 50}, {58, 98, 58}, {96, 128, 70}}};
 static const Ramp4 ROCK_R  = {{{64, 52, 100}, {116, 92, 124}, {190, 128, 112}, {226, 170, 140}}};
 static const Ramp4 ROCK2_R = {{{50, 46, 80}, {96, 82, 108}, {160, 110, 100}, {200, 150, 124}}};
+static bool s_flashOn = false;            // the flashlight (long-press B)
+static bool s_flashWarm = false;          // this frame: dark enough that its warm ramp is in the palette
+static float g_windLat = 0.f;             // the west wind's sideways push on screen (+ right), from your facing
+static float g_objBearing = 0.f;          // bearing of the object being drawn (for north-side moss)
+static bool s_alignOn = false;            // the alignment drag's diagnostic overlay
+static float s_alignSum = 0.f;
 bool g_noGroundCache = false;           // tests: render without the ground cache
 static inline uint8_t leafI(int s, bool far);
 static Ramp4 g_leafR, g_grassR, g_stoneR, g_wetR, g_barkR, g_rockR, g_rock2R;
@@ -241,17 +265,30 @@ static C3 rampAt(const Ramp4& r, float s) {
     if (i >= 3) return r.k[3];
     return mix(r.k[i], r.k[i + 1], s - i);
 }
-static const C3 ACCENT[16] = {
+// The creatures' second 16 (see R_FAUNA): blacks and browns for hooves, eyes and coats; greys for foxes,
+// herons and owls; rust, orange and red; deep and bright greens; deep and sky blues.
+static const C3 AURORA_DEF[7] = {{150, 90, 230}, {80, 120, 255}, {70, 200, 235}, {90, 225, 110}, {250, 235, 90}, {255, 160, 60}, {240, 70, 60}};
+static const C3 FAUNA_DEF[16] = {
+    {22, 18, 16}, {58, 38, 26}, {96, 62, 38}, {150, 104, 62}, {206, 170, 122}, {238, 224, 194},
+    {56, 58, 64}, {110, 112, 118}, {176, 178, 184}, {170, 72, 40}, {228, 132, 52}, {196, 40, 38},
+    {38, 94, 50}, {112, 190, 72}, {40, 70, 160}, {92, 172, 222}};
+static const C3 ACCENT_DEF[16] = {
     {14, 10, 22}, {70, 40, 22}, {130, 78, 40}, {195, 145, 95}, {120, 110, 100}, {190, 180, 165},
     {170, 40, 100}, {240, 90, 160}, {255, 175, 215}, {50, 60, 170}, {95, 135, 250}, {175, 135, 245},
     {240, 170, 40}, {255, 232, 120}, {240, 240, 235}, {30, 28, 40}};
+static const C3* g_accent = ACCENT_DEF;      // read through pointers: a planet mod points these at its own copies
+static const C3* g_fauna = FAUNA_DEF;
+static const C3* g_aurora = AURORA_DEF;
+#define ACCENT g_accent
+#define FAUNA g_fauna
+#define AURORA g_aurora
 
 static bool s_rainbowSwap = false;
 static float s_occ[256];           // how much of the sun's light each palette entry blocks per ray step
 static float s_fogAmt[256];        // how readily each entry steps into its hazier twin
 
 static C3 spectrum(float t) {      // 0 violet (inner) .. 1 red (outer)
-    static const C3 K[7] = {{150, 90, 230}, {80, 120, 255}, {70, 200, 235}, {90, 225, 110}, {250, 235, 90}, {255, 160, 60}, {240, 70, 60}};
+    const C3* K = AURORA;
     float f = clampf(t, 0.f, 1.f) * 6.f;
     int i = (int)f;
     if (i >= 6) return K[6];
@@ -336,8 +373,9 @@ static void buildPalette() {
         // accents: critters + flowers, lit but stay saturated
         P[R_ACCENT + i] = mix(lit(ACCENT[i], 0.7f), mul(ACCENT[i], S.amb), 0.35f);
     }
-    P[R_ACCENT + A_YEL_L] = mix(C3{215, 255, 120}, C3{255, 196, 104}, fmaxf(g_japan, g_karst));   // firefly light is its own; lantern light is warm
-    if (g_tropical > 0.01f) for (int i = R_WATER; i < R_WATER + N_REFLECT + 16 && i < 256; i++) P[i] = mix(P[i], mul(C3{40, 170, 130}, S.amb), 0.3f * g_tropical);   // emerald pools
+    P[R_ACCENT + A_YEL_L] = mix(C3{215, 255, 120}, C3{255, 196, 104}, fmaxf(g_japan, g_karst));
+    if (s_alignOn) { P[R_ACCENT + A_LAV] = C3{235, 40, 40}; P[R_ACCENT + A_BLUE] = C3{40, 235, 90}; }   // diagnostic red and green, unlit   // firefly light is its own; lantern light is warm
+    if (g_tropical > 0.01f) for (int i = R_WATER; i < R_WATER + N_REFLECT + 16 && i < 256; i++) if (isWaterI((uint8_t)i)) P[i] = mix(P[i], mul(C3{40, 170, 130}, S.amb), 0.3f * g_tropical);   // emerald pools
     if (g_japan > 0.01f) P[R_ACCENT + A_BLUE_D] = mix(P[R_ACCENT + A_BLUE_D], mix(lit(C3{226, 70, 44}, 0.75f), mul(C3{226, 70, 44}, S.amb), 0.35f), g_japan);   // vermilion
     if (sc.aurora > 0.01f && S.night > 0.2f) {                      // aurora nights: the cloud ramp glows
         float k = sc.aurora * S.night;
@@ -353,6 +391,26 @@ static void buildPalette() {
         bool sun = i >= R_SUN && i < R_SUN + 16;
         P[R_WATER + i] = sun ? scale(P[i], 0.9f) : add(scale(P[i], 0.56f), scale(mul(WATER, S.amb), 0.44f));
     }
+    // far peaks reflect through another water twin (their own slots now hold creature colours): the closest
+    // colour to what their twin used to be, from the sky, cloud, near-mountain and hill twins (not the sun's,
+    // which the flashlight borrows), so the cool, slightly desaturated reflection survives
+    for (int i = 0; i < 16; i++) {
+        C3 want = add(scale(P[R_MTN_FAR + i], 0.56f), scale(mul(WATER, S.amb), 0.44f));
+        float best = 1e9f;
+        for (int j = 0; j < N_REFLECT; j++) {
+            if ((j >= R_SUN && j < R_SUN + 16) || (j >= R_MTN_FAR && j < R_MTN_FAR + 16)) continue;
+            const C3& c = P[R_WATER + j];
+            float dr = c.r - want.r, dg = c.g - want.g, db = c.b - want.b;
+            float d = dr * dr * 0.3f + dg * dg * 0.59f + db * db * 0.11f;
+            if (d < best) { best = d; s_farTwin[i] = (uint8_t)(R_WATER + j); }
+        }
+    }
+    for (int i = 0; i < 16; i++) P[R_FAUNA + i] = mix(lit(FAUNA[i], 0.7f), mul(FAUNA[i], S.amb), 0.35f);   // the creatures' extra colours, lit like the accents
+    if (s_flashWarm) {                       // the flashlight's warm light: foliage (0..7) and everything else (8..15)
+        static const C3 WARM[16] = {{18, 22, 8}, {36, 44, 14}, {60, 72, 22}, {90, 104, 32}, {126, 138, 48}, {170, 176, 72}, {212, 210, 104}, {244, 240, 150},
+                                    {24, 14, 8}, {52, 30, 14}, {88, 52, 24}, {130, 82, 40}, {176, 118, 62}, {214, 158, 92}, {240, 198, 132}, {255, 232, 184}};
+        for (int i = 0; i < 16; i++) P[R_WATER + R_SUN + i] = WARM[i];
+    }
     // light weights for the crepuscular march and fog amounts for the veil
     for (int i = 0; i < 256; i++) {
         float lum = (P[i].r * 0.3f + P[i].g * 0.55f + P[i].b * 0.15f) / 255.f;
@@ -365,7 +423,7 @@ static void buildPalette() {
         else if (i >= R_LEAF && i < R_LEAF + 8) oc = 0.5f;                     // near canopies and trunks
         else if (i >= R_LEAF + 8 && i < R_BARK) oc = 0.15f;
         else if (i >= R_BARK && i < R_ACCENT) oc = 0.55f;
-        else if (i >= R_ACCENT && i < R_WATER) oc = 0.3f;
+        else if ((i >= R_ACCENT && i < R_WATER) || (i >= R_FAUNA && i < R_FAUNA + 16)) oc = 0.3f;
         s_occ[i] = oc;
         float f = 0.f;
         if (i >= R_MTN_FAR && i < R_HILLS) f = 0.6f;
@@ -375,11 +433,11 @@ static void buildPalette() {
         else if (i >= R_LEAF && i < R_LEAF + 8) f = 0.f;                    // near things stay crisp
         else if (i >= R_LEAF + 8 && i < R_BARK) f = 0.55f;
         else if (i >= R_BARK && i < R_ACCENT) f = 0.f;
-        else if (i >= R_WATER) f = 0.4f;
+        else if (isWaterI((uint8_t)i)) f = 0.4f;
         s_fogAmt[i] = f * sc.fog;
     }
     if (sc.flash > 0.01f)
-        for (int i = 0; i < 256; i++) P[i] = mix(P[i], C3{225, 230, 255}, sc.flash * ((i < R_GROUND || i >= R_WATER) ? 0.6f : 0.3f));
+        for (int i = 0; i < 256; i++) P[i] = mix(P[i], C3{225, 230, 255}, sc.flash * ((i < R_GROUND || isWaterI((uint8_t)i)) ? 0.6f : 0.3f));
     if (sc.intro > 0.f) {                                           // the dream fades in out of white mist
         float k = powf(sc.intro, 1.5f);
         for (int i = 0; i < 256; i++) P[i] = mix(P[i], C3{238, 234, 244}, k);
@@ -517,6 +575,15 @@ static void drawNight() {
             }
         }
     }
+    // the North Star: one steady star, a touch brighter than the rest, always due north
+    if (n > 0.3f && g_scene.cloud < 0.75f) {
+        float rel = wrapPi(AZ_NORTH - g_yaw);
+        if (fabsf(rel) < FOV * 0.5f + 0.02f) {
+            int x = (int)lroundf(W * 0.5f + rel * PXR), y = 21;
+            put(x, y, R_SUN + 15);
+            put(x - 1, y, R_SUN + 10); put(x + 1, y, R_SUN + 10); put(x, y - 1, R_SUN + 10); put(x, y + 1, R_SUN + 10);
+        }
+    }
     // moon
     if (n > 0.3f) {
         float mx = W * 0.5f + wrapPi(MOON_AZ - g_yaw) * PXR, my = 18.f;
@@ -619,26 +686,46 @@ static void drawClouds() {
         float rel = wrapPi(SUN_AZ - a);
         prox[cx] = sunVis / (1.f + rel * rel * 6.f);
     }
-    auto D = [&](float fx, float fy) -> float {           // bilinear density at cell coords
-        fx = clampf(fx, 0.f, CW - 1.001f); fy = clampf(fy, -1.f, CR - 0.001f);
-        int ix = (int)fx, iy = (int)floorf(fy);
-        int ix1 = ix + 1 < CW ? ix + 1 : ix;
-        float tx = fx - ix, ty = fy - iy;
-        float a0 = DN(ix, iy + 1) + (DN(ix1, iy + 1) - DN(ix, iy + 1)) * tx;
-        float a1 = DN(ix, iy + 2) + (DN(ix1, iy + 2) - DN(ix, iy + 2)) * tx;
-        return a0 + (a1 - a0) * ty;
+    // Bilinear density at cell coordinates. The per-column and per-row parts of the lookup are computed once per
+    // frame (the same expressions, so the same values); a cell whose four corners are all too thin to draw is
+    // skipped outright (a blend never exceeds its largest corner; drawing needs d >= 0.0409, the skip uses 0.035).
+    struct ColL { int ix, ix1; float tx; int prox; };
+    struct RowL { int iy; float ty; };
+    struct CloudLUT { ColL col[W]; RowL rowC[CR * 2], rowD[CR * 2], rowU[CR * 2]; float cellMax[CW * (CR + 2)]; };
+    static CloudLUT* lut = nullptr;                                // runtime buffer (internal RAM): too big for static RAM
+    if (!lut) lut = (CloudLUT*)allocScratch(sizeof(CloudLUT));
+    if (!lut) return;
+    ColL* col = lut->col; RowL* rowC = lut->rowC; RowL* rowD = lut->rowD; RowL* rowU = lut->rowU; float* cellMax = lut->cellMax;
+    for (int x = 0; x < W; x++) {
+        float fxRaw = (wx0 + x) / 3.f - c0;
+        float fx = clampf(fxRaw, 0.f, CW - 1.001f);
+        int ix = (int)fx;
+        col[x] = {ix, ix + 1 < CW ? ix + 1 : ix, fx - ix, clampi((int)fxRaw, 0, CW - 1)};
+    }
+    auto rowOf = [&](float fy) -> RowL { fy = clampf(fy, -1.f, CR - 0.001f); int iy = (int)floorf(fy); return {iy, fy - iy}; };
+    for (int y = 0; y < CR * 2; y++) { float fy = y * 0.5f - 0.25f; rowC[y] = rowOf(fy); rowD[y] = rowOf(fy + 1.f); rowU[y] = rowOf(fy - 1.f); }
+    for (int cx = 0; cx < CW; cx++) {
+        int cx1 = cx + 1 < CW ? cx + 1 : cx;
+        for (int r = 0; r + 1 < CR + 2; r++)
+            cellMax[cx * (CR + 2) + r] = fmaxf(fmaxf(DN(cx, r), DN(cx1, r)), fmaxf(DN(cx, r + 1), DN(cx1, r + 1)));
+    }
+    auto D = [&](const ColL& c, const RowL& r) -> float {
+        float a0 = DN(c.ix, r.iy + 1) + (DN(c.ix1, r.iy + 1) - DN(c.ix, r.iy + 1)) * c.tx;
+        float a1 = DN(c.ix, r.iy + 2) + (DN(c.ix1, r.iy + 2) - DN(c.ix, r.iy + 2)) * c.tx;
+        return a0 + (a1 - a0) * r.ty;
     };
     for (int y = 0; y < CR * 2; y++) {
-        float fy = y * 0.5f - 0.25f;
+        const RowL& rc = rowC[y];
         for (int x = 0; x < W; x++) {
-            float fx = (wx0 + x) / 3.f - c0;
-            float d = D(fx, fy);
+            const ColL& c = col[x];
+            if (cellMax[c.ix * (CR + 2) + rc.iy + 1] < 0.035f) continue;          // nothing here thick enough to draw
+            float d = D(c, rc);
             if (d <= 0.f) continue;
             float alpha = clampf(d * 11.f, 0.f, 1.f);
             if (alpha < 0.45f || (alpha < 0.7f && (((x + g_pan) ^ y) & 1))) continue;   // crisp 1 px edge, thin seam
-            float dn = D(fx, fy + 1.f), up = D(fx, fy - 1.f);
+            float dn = D(c, rowD[y]), up = D(c, rowU[y]);
             float bottom = clampf((d - dn) * 6.f, 0.f, 1.f), top = clampf((d - up) * 6.f, 0.f, 1.f);
-            float light = 0.28f + bottom * 0.62f * lowSun + top * 0.45f * (1.f - lowSun) + prox[clampi((int)fx, 0, CW - 1)] * 0.3f + (1.f - alpha) * 0.18f;
+            float light = 0.28f + bottom * 0.62f * lowSun + top * 0.45f * (1.f - lowSun) + prox[c.prox] * 0.3f + (1.f - alpha) * 0.18f;
             light *= 1.f - 0.35f * sc.rain;
             int lvl = clampi(band(light * 4.f, x, y), 0, 4) * 3 + 2;               // five light bands
             if (dn <= 0.f && lowSun > 0.25f) lvl = 14;                             // sunset lights the bellies
@@ -695,10 +782,10 @@ static void drawHills(const float* hh, int baseY, int half) {
 
 // Index-space fog: step a pixel to its more-fogged palette twin. No new colours, no dots.
 static inline uint8_t fogStep(uint8_t p) {
-    if (p >= R_WATER) {
+    if (isWaterI(p)) {
         uint8_t q = p - R_WATER;
         uint8_t f = fogStep(q);
-        return f < N_REFLECT ? (uint8_t)(R_WATER + f) : p;
+        return f < N_REFLECT ? reflIdx(f) : p;
     }
     if (p >= R_HILLS && p < R_HILLS + 8) return p + 8;                                   // near hills -> far hills
     if (p >= R_HILLS + 8 && p < R_GROUND) return R_MTN_NEAR + 1 + (p & 7);                // far hills -> mountain haze
@@ -730,6 +817,62 @@ static void drawMist(int y0, int y1) {
 }
 
 // ---------------- ground + lake ----------------
+// ---- Grass clumps: a small texture of overlapping tufts, generated once, read with one lookup per ground pixel.
+// Each cell is a shade OFFSET on top of the ground's own light (so day, night, dapples, snow and every biome's
+// ramp still apply): lit spiky blade tips on the far side of each tuft, a mid-tone body, and dark crevices
+// where one tuft tucks behind the next. Tufts are drawn far to near so nearer ones overlap. Two variants, each
+// also mirrored, give four looks; the width (130) divides the world's grass lattice so it wraps seamlessly.
+static constexpr int GT_W = 130, GT_H = 48;
+static int8_t* g_grassTex = nullptr;                   // [2][GT_H][GT_W], internal RAM (read per ground pixel)
+static void buildGrassTex() {
+    g_grassTex = (int8_t*)memFast(2 * GT_W * GT_H);
+    if (!g_grassTex) return;
+    uint32_t r = 0x6A55u;
+    auto rnd = [&]() { r = r * 1664525u + 1013904223u; return (r >> 8) * (1.f / 16777216.f); };
+    for (int v = 0; v < 2; v++) {
+        int8_t* T = g_grassTex + v * GT_W * GT_H;
+        // Two layers, added: MOUNDS (tufts gathered into rounded clumps, lit on top, dark crevices at their feet
+        // where each tucks behind the one in front) and BLADES (tall narrow tufts fanning from their base, each
+        // blade a column with a darker seam beside it, the tips catching the light). A cell is ~1.8 px wide and
+        // ~1 row tall on screen, so shapes are drawn tall and narrow in cells.
+        int8_t* mound = (int8_t*)malloc(2 * GT_W * GT_H);              // scratch for building (freed below)
+        if (!mound) { memset(T, 0, GT_W * GT_H); continue; }
+        int8_t* blade = mound + GT_W * GT_H;
+        auto wr = [&](int8_t* L, int x, int y, int8_t v) { x %= GT_W; if (x < 0) x += GT_W; y %= GT_H; if (y < 0) y += GT_H; L[y * GT_W + x] = v; };
+        for (int i = 0; i < GT_W * GT_H; i++) { mound[i] = -1; blade[i] = 0; }
+        for (int cyb = GT_H + 8; cyb > -8; cyb -= 5) {                      // mounds, far (high y) to near
+            for (float cx = rnd() * 6.f; cx < GT_W; cx += 6.f + rnd() * 4.f) {
+                int rw = 5 + (int)(rnd() * 3.f), rh = 5 + (int)(rnd() * 3.f);
+                int cy = cyb + (int)(rnd() * 3.f) - 1;
+                for (int dx = -rw; dx <= rw; dx++) {
+                    float k = (float)dx / (rw + 0.5f);
+                    int top = cy + (int)floorf(rh * sqrtf(fmaxf(0.f, 1.f - k * k)));
+                    for (int y = cy; y <= top; y++) wr(mound, (int)cx + dx, y, (int8_t)(y >= top - 2 ? 1 : 0));
+                    wr(mound, (int)cx + dx, cy - 1, -1);                          // its shadowed foot
+                }
+            }
+        }
+        for (int cyb = GT_H + 8; cyb > -8; cyb -= 2) {                      // blades, far to near
+            for (float cx = rnd() * 4.f; cx < GT_W; cx += 2.5f + rnd() * 3.f) {
+                int hw = 1 + (int)(rnd() * 2.2f), ht = 3 + (int)(rnd() * 4.f);
+                int cy = cyb + (int)(rnd() * 2.f);
+                float lean = (rnd() - 0.5f) * 0.5f;
+                for (int dx = -hw; dx <= hw; dx++) {
+                    int colTop = cy + ht - (abs(dx) == hw ? 1 + (int)(rnd() * 2.f) : (int)(rnd() * 2.f));
+                    bool seam = ((dx + hw) & 1) != 0;
+                    for (int y = cy; y <= colTop; y++) {
+                        float u = (float)(y - cy) / (float)(colTop - cy + 1);
+                        int x = (int)cx + (int)lroundf(dx * (0.45f + 0.55f * u) + lean * (y - cy));
+                        wr(blade, x, y, (int8_t)(seam ? (u > 0.6f ? 0 : -1) : (y == colTop ? 1 : 0)));
+                    }
+                }
+            }
+        }
+        for (int i = 0; i < GT_W * GT_H; i++) { int o = mound[i] + blade[i]; T[i] = (int8_t)(o < -1 ? -1 : o > 2 ? 2 : o); }
+        free(mound);
+    }
+}
+
 static void drawGround() {
     const uint32_t seed = worldSeed();
     const BiomeParams& bh = biomeAt(g_dist);
@@ -790,7 +933,8 @@ static void drawGround() {
                         if (sy < 0) sy = 0;
                         int sx = clampi(px + (paddy ? 0 : xoffRow[py]), 0, W - 1);   // terraces lie mirror-still
                         uint8_t src = fb[sy * W + sx];
-                        idx = src < N_REFLECT ? (uint8_t)(R_WATER + src) : (uint8_t)(R_WATER + R_HILLS);
+                        idx = src < N_REFLECT ? reflIdx(src) : (uint8_t)(R_WATER + R_HILLS);
+                        if (s_flashWarm && src >= R_SUN && src < R_SUN + 16) idx = R_WATER + R_CLOUD + 14;   // (those slots hold the flashlight's light)
                         if (g_snow > 0.5f && !creek) {                     // frozen: pale ice, a faint mirror, cracks
                             float zq = ZK / (py - HOR + 0.5f);
                             uint32_t ic = hash32((uint32_t)((px + g_pan) >> 2) * 0x9E3779B1u ^ (uint32_t)(int)floorf((g_dist + zq) * 1.5f) * 0x85EBCA77u);
@@ -841,23 +985,38 @@ static void drawGround() {
                         // grass in clusters: blades ~2 px wide, 2-3 rows tall, anchored to the world
                         int gx = ((int)floorf(angU(colAng[px], 520)) % 520 + 520) % 520;
                         static const float BLADE_K[4] = {3.6f, 1.2f, 0.45f, 0.15f};  // ~3 rows per blade in every band
-                        int gz = (int)floorf((g_dist + z) * BLADE_K[bnd]);
-                        uint32_t h = hash32((uint32_t)gx * 0x9E3779B1u ^ (uint32_t)gz * 0x85EBCA77u ^ seed);
                         if (gravelAt && z < 26.f) {                         // raked gravel: lines drawn by a rake, anchored to the world
                             int rake = (int)floorf((g_dist + z) * 5.f);
                             idx = R_BARK + 8 + ((rake & 1) ? 5 : 4) + (lightAt >= 2 ? 1 : 0) - (bnd > 1 ? 1 : 0);
                             fb[py * W + px] = idx;
                             continue;
                         }
-                        int sh = lightAt;                                   // dappled light for this block
-                        if ((h & 3u) == 0 && sh < 3) sh++;                  // blades catching the light
-                        else if ((h & 15u) == 1 && sh > 0) sh--;            // the odd blade in its own shade
+                        // tufts from the clump texture: bigger near you, finer toward the horizon
+                        static const float TUFT_V[4] = {2.f, 3.f, 4.f, 4.f};
+                        int gxs = bnd < 2 ? gx : ((int)floorf(angU(colAng[px], 1040)) % 1040 + 1040) % 1040;   // finer toward the horizon
+                        float dz = (g_dist + z) * BLADE_K[bnd] * TUFT_V[bnd];
+                        int dzi = (int)floorf(dz);
+                        int ty = dzi % GT_H; if (ty < 0) ty += GT_H;
+                        int tile = gxs / GT_W + (dzi >= 0 ? dzi / GT_H : -1 - (-dzi - 1) / GT_H) * 3 + bnd;
+                        int tx = gxs % GT_W;
+                        if (tile & 2) tx = GT_W - 1 - tx;                   // the mirrored looks
+                        int off = g_grassTex ? g_grassTex[(tile & 1) * GT_W * GT_H + ty * GT_W + tx] : 0;
+                        if (bnd == 3 || g_snow > 0.5f || g_desert > 0.5f)    // the far distance, snowfields and sand: only the strongest shapes, softly
+                            off = off >= 2 ? 1 : (off <= -1 && bnd != 3 && (tx & 1)) ? -1 : 0;
+                        int sh = lightAt + off;                             // the tuft on the ground's own light
+                        sh = sh < 0 ? 0 : sh > 3 ? 3 : sh;
                         idx = R_GROUND + bnd * 4 + sh;
+                        bool nearRows = z < 9.f || (g_glowMoss > 0.5f && S.night > 0.35f && bnd < 2);
+                        uint32_t h = 0;
+                        if (nearRows) {                                     // flowers and glowing moss: exactly where they were
+                            int gz = (int)floorf((g_dist + z) * BLADE_K[bnd]);
+                            h = hash32((uint32_t)gx * 0x9E3779B1u ^ (uint32_t)gz * 0x85EBCA77u ^ seed);
+                        }
                         if (g_glowMoss > 0.5f && S.night > 0.35f && bnd < 2 && (h & 511u) < 5u) {   // moss glowing faintly in the dark
                             fb[py * W + px] = R_ACCENT + A_YEL_L;
                             continue;
                         }
-                        if (z < 9.f && (h & 255u) < flowerRate) {
+                        if (z < 9.f && nearRows && (h & 255u) < flowerRate) {
                             static const uint8_t fl[4] = {A_PINK_L, A_BLUE, A_YEL, A_LAV};
                             static const uint8_t he[4] = {A_LAV, A_PINK, A_LAV, A_PINK_L};   // heather on the moor
                             idx = R_ACCENT + (heather ? he : fl)[(h >> 8) & 3u];
@@ -871,7 +1030,7 @@ static void drawGround() {
 }
 
 // ---------------- pixel care: waterline, cast shadows, stray pixels ----------------
-static inline bool isWater(uint8_t p) { return p >= R_WATER; }
+static inline bool isWater(uint8_t p) { return isWaterI(p); }
 static inline bool isGround(uint8_t p) { return p >= R_GROUND && p < R_LEAF; }
 static inline uint8_t groundShade(uint8_t p, int sh) { return (uint8_t)(R_GROUND + (((p - R_GROUND) >> 2) << 2) + sh); }
 
@@ -977,7 +1136,9 @@ static void drawCrepuscular() {
     if (str < 0.04f || !s_rayT) return;
 #ifdef HOST
     if (getenv("NORAYS")) return;
-    if (getenv("RAYDBG")) fprintf(stderr, "rays: str %.2f sun (%.0f,%.0f) elev %.2f\n", str, sunX, sunY, S.elev);
+#ifdef HOST
+    if (getenv("RAYDBG")) fprintf(stderr, "rays: str %.2f sun (%.0f,%.0f) elev %.2f\n", str, sunX, sunY, S.elev);   // desktop debugging only
+#endif
 #endif
     // light leaves the sun along each bin and is attenuated by whatever it crosses; a whisper of
     // multiple scattering lets blocked shafts glow back up slowly. A soft angular streak pattern
@@ -1030,7 +1191,7 @@ static void drawCrepuscular() {
                 int b = (int)(B * 6.5f + dith(x, y) - 0.45f);
                 if (b <= 0) continue;
                 if (p < R_SUN || (p >= R_MTN_FAR && p < R_HILLS)) { int lim = p | 15; p = (uint8_t)(p + b > lim ? lim : p + b); }
-                else if (p >= R_WATER) {
+                else if (isWaterI(p)) {
                     int q = p - R_WATER;
                     if (q >= R_SUN && q < R_SUN + 16) continue;
                     int lim = (q >= R_HILLS && q < R_GROUND) ? (p | 7) : (p | 15);
@@ -1074,7 +1235,7 @@ static void drawDrift(int n, bool leaves, bool petals = false) {
         float y = -10.f + tt * v;
         float span = W * 1.5f;
         float sway = sinf(g_t * (1.2f + hashf(h ^ 3u)) + hashf(h ^ 4u) * 6.28f) * (leaves ? 7.f : 3.f) * (1.f - depth * 0.5f);
-        float x = fmodf(hashf(h ^ 2u) * span - g_pan * (0.5f + 0.5f * (1.f - depth)) + sway + g_scene.wind * y * 0.3f + span * 64.f, span) - W * 0.25f;
+        float x = fmodf(hashf(h ^ 2u) * span - g_pan * (0.5f + 0.5f * (1.f - depth)) + sway + g_scene.wind * y * 0.3f * g_windLat + span * 64.f, span) - W * 0.25f;
         uint8_t c;
         if (petals) c = (sinf(g_t * 4.f + k) > 0.f) ? R_ACCENT + A_PINK_L : R_ACCENT + A_WHITE;
         else if (leaves) {
@@ -1093,7 +1254,7 @@ static void drawRain() {
     if (sc.rain < 0.03f) return;
     if (g_snow > 0.5f) { drawDrift((int)(sc.rain * 260.f), false); return; }   // in the north it snows
     int N = (int)(sc.rain * 230.f + sc.storm * 140.f);
-    float slant = 0.12f + sc.wind * 0.55f;
+    float slant = (0.12f + sc.wind * 0.55f) * g_windLat;          // rain blows from the west
     float yawShift = g_yaw * PXR;
     for (int k = 0; k < N; k++) {
         uint32_t h = hash32((uint32_t)k * 0x9E3779B1u + 0x51A1u);
@@ -1120,7 +1281,7 @@ static void drawRain() {
         uint32_t h = hash32((uint32_t)k * 0x632BE5ABu ^ slice * 0x85EBCA77u);
         int x = (int)(hashf(h) * W), y = HOR + 2 + (int)(hashf(h ^ 7u) * (H - HOR - 2));
         uint8_t p = fb[y * W + x];
-        if (p >= R_WATER) {
+        if (isWaterI(p)) {
             uint8_t c = R_WATER + R_SKY + 13;
             int r = 1 + (int)(fmodf(g_t * 8.f, 1.f) * 2.f);
             put(x - r, y, c); put(x + r, y, c); put(x, y - 1, c);
@@ -1184,7 +1345,7 @@ static void drawAurora() {
     if (au < 0.02f) return;
     for (int x = 0; x < W; x++) {
         float a = colAng[x];
-        float d = wrapPi(a - 1.5707963f);                                // the aurora hangs in the north
+        float d = wrapPi(a - AZ_NORTH);                                  // the aurora hangs in the north
         float wgt = expf(-d * d / (0.9f + 2.f * g_auroraBoost));          // in the far north it fills the sky
         if (wgt < 0.03f) continue;
         float n = fbmP(angU(a, 48), g_t * 0.06f, 48, 3, 0xA0A0u);
@@ -1259,7 +1420,7 @@ static void drawFloatingLanterns() {
         int x = (int)(W * 0.5f + wrapPi(a - g_yaw) * PXR), y = (int)(HOR + ZK / z);
         if ((unsigned)x >= (unsigned)W || y >= H - 1 || y <= HOR) continue;
         uint8_t under = fb[y * W + x];
-        if (under < R_WATER || under >= R_WATER + N_REFLECT + 16) continue;   // only where there is water
+        if (!isWaterI(under) || under >= R_WATER + N_REFLECT + 16) continue;   // only where there is water
         bool flick = sinf(g_t * 3.f + k) > -0.7f;
         put(x, y - 1, flick ? R_ACCENT + A_YEL_L : R_ACCENT + A_YEL);
         if (z < 15.f) { put(x + 1, y - 1, R_ACCENT + A_YEL); put(x, y - 2, R_ACCENT + A_YEL_L); }
@@ -1576,7 +1737,12 @@ static void drawTrunk(int cx, int ytop, int by, int tw, int flareRows, const Lig
                 if ((hs & 7u) < 2u) sh -= 2;                      // a crevice
                 else if ((hs & 15u) == 15u) sh += 1;              // a ridge catching light
                 if (x == cx - w || x == cx + w) sh = (lu > 0.f) ? rimSh : 0;
-                if (!L.far && up < flareRows + 2 && lu < -0.25f && ((hs >> 5) & 3u) == 0) { put(x, y, leafI(2 + (int)((hs >> 8) & 1u), false)); continue; }
+                if (!L.far && up < (by - (ytop < 0 ? 0 : ytop)) * 6 / 10 + flareRows) {   // moss grows on the north side, low on the trunk
+                    float nb = g_objBearing + PI_F - u * 1.5707963f;                       // which way this bit of bark faces
+                    float m = cosf(nb - AZ_NORTH);
+                    float lowK = 1.f - (float)up / (float)((by - (ytop < 0 ? 0 : ytop)) * 6 / 10 + flareRows + 1);
+                    if (m > 0.35f && (float)((hs >> 5) & 15u) < m * lowK * 9.f) { put(x, y, leafI(2 + (int)((hs >> 9) & 1u), false)); continue; }
+                }
             }
             put(x, y, barkI(clampi(sh, 0, 7), L.far));
         }
@@ -2275,6 +2441,70 @@ static void drawSpriteI(const char* const* rows, int nr, float cx, float baseY, 
             if (ch != '.') put(x0 + x, y0 + y + dy, spriteColor(ch));
         }
 }
+// Deer species are recolours of the same art: the coat and its light tone change; dark, white, eyes and antlers don't.
+static inline uint8_t deerRemap(uint8_t v, uint8_t p) {
+    if (p == R_ACCENT + A_DEER)   return (v == 1 || v == 3 || v == 5) ? R_ACCENT + A_RAB : v == 4 ? R_ACCENT + A_DEER_D : v == 7 ? R_ACCENT + A_WHITE : p;
+    if (p == R_ACCENT + A_DEER_L) return (v == 1 || v == 5) ? R_ACCENT + A_RAB_L : v == 2 ? R_ACCENT + A_WHITE : v == 4 ? R_ACCENT + A_DEER : v == 7 ? R_CLOUD + 15 : p;
+    return p;
+}
+static void blitSpr(const Spr* sp, float cx, float baseY, bool flip, uint8_t variant) {
+    if (!sp || !sp->px) return;
+    const int k = sp->k, w = sp->w, h = sp->h;
+    int x0 = (int)cx - w * k / 2, y0 = (int)baseY - h * k;
+    for (int y = 0; y < h * k; y++) {
+        int sy = y / k;
+        int dy = (sy < g_bowRows) ? g_bowDy * k : 0;                 // the sika's bow
+        for (int x = 0; x < w * k; x++) {
+            int sx = x / k;
+            if (flip) sx = w - 1 - sx;
+            uint8_t p = sp->px[sy * w + sx];
+            if (p) put(x0 + x, y0 + y + dy, deerRemap(variant, p));
+        }
+    }
+}
+static uint8_t spriteColor(char ch);
+static uint8_t antlerColour(char ch) { return ch == 'a' ? (uint8_t)(R_FAUNA + 4) : spriteColor(ch); }   // bone, whatever the coat
+// A part (a tail) at a body's anchor, the same way round as the body.
+static void blitPart(const Spr* part, const Spr* body, float cx, float baseY, bool flip, uint8_t variant) {
+    if (!part || !part->px || !body) return;
+    const int k = body->k, pk = part->k;
+    int x0 = (int)cx - body->w * k / 2, y0 = (int)baseY - body->h * k;
+    int axs = x0 + (flip ? (body->w - 1 - body->tx) : body->tx) * k, ays = y0 + body->ty * k;
+    for (int y = 0; y < part->h; y++)
+        for (int x = 0; x < part->w; x++) {
+            uint8_t p = part->px[y * part->w + x];
+            if (!p) continue;
+            int ox = (x - part->ax) * pk, oy = (y - part->ay) * pk;
+            for (int j = 0; j < pk; j++) for (int i = 0; i < pk; i++) put(axs + (flip ? -ox - i : ox + i), ays + oy + j, deerRemap(variant, p));
+        }
+}
+// A deer as it is now: doe, buck, fawn or caribou cow; its pose from its mood; its tail down, flicking or flagged.
+static void drawDeer(const FieldCritter& c, float cx, float baseY, float pxTall, bool flip, uint8_t sexOverride = 255) {
+    uint8_t sex = sexOverride != 255 ? sexOverride : c.sex;
+    if (sex == SEX_DOE && (c.variant == 1 || c.variant == 5)) sex = SEX_COW;        // caribou cows grow antlers too
+    bool away = c.fleeing ? c.awayFlee : c.mood == DEER_SHOW;
+    uint8_t anim = away ? AN_AWAY : c.fleeing ? AN_BOUND
+                 : c.mood == DEER_GRAZE ? AN_GRAZE : c.mood == DEER_ALERT ? AN_ALERT : c.mood == DEER_STOMP ? AN_STOMP
+                 : (c.mood == DEER_SNIFF || c.mood == DEER_PET) ? AN_SNIFF : c.mood == DEER_NURSE ? (sex == SEX_FAWN ? AN_NURSE : AN_STAND)
+                 : AN_WALK;
+    float fps = anim == AN_BOUND || anim == AN_AWAY ? 10.f : anim == AN_WALK ? 6.f : anim == AN_STOMP ? 4.f : 2.f;
+    if (anim == AN_WALK && c.mood != DEER_WALK && c.mood != DEER_APPROACH) fps = 0.f;
+    int frame = (int)((g_t - c.t0) * fps) + (int)(c.seed & 3);
+    float tierPx = pxTall;
+    if (sex == SEX_FAWN) pxTall *= 0.6f;
+    uint8_t tier = deerTierFor(tierPx);
+    const Spr* body = deerFrame(sex, tier, anim, frame);
+    blitSpr(body, cx, baseY, flip, c.variant);
+    // the tail: does and fawns flag in alarm, flick when at ease, and show it off turned away; bucks keep it down
+    uint8_t tail = TAIL_DOWN;
+    if (sex != SEX_BUCK) {
+        float tt = g_t + (c.seed & 255) * 0.13f;
+        if (c.fleeing || c.mood == DEER_STOMP) tail = TAIL_FLAG;
+        else if (c.mood == DEER_SHOW) tail = sinf(tt * 2.4f) > 0.f ? TAIL_FLAG : TAIL_FLICK;
+        else if (fmodf(tt, 3.7f) < 0.35f || c.mood == DEER_PET) tail = TAIL_FLICK;
+    }
+    blitPart(deerTail(sex, tier, anim == AN_AWAY, tail), body, cx, baseY, flip, c.variant);
+}
 static void drawCritterSprite(bool deer, float cx, float baseY, float pxTall, bool flip) {
     const char* const* sm = deer ? DEER : RABBIT;
     const char* const* lg = deer ? DEER_L : RABBIT_L;
@@ -2313,6 +2543,12 @@ static void drawCritter(const FieldCritter& c) {
     bool fleeing = c.fleeing;
     bool faceRight = fleeing && c.kind <= CR_BIRDS ? c.dir > 0 : c.faceRight;
     g_variant = c.variant;
+    int mod = c.kind != CR_DEER ? creatureModFor(c.kind, c.variant, c.seed) : -1;   // art from the card, if any
+    if (mod >= 0 && !creatureModFlock(mod)) {
+        const Spr* m = creatureModSprite(mod, fleeing, s, (int)(e * 8.f) + (int)(c.seed & 3));
+        if (m) { blitSpr(m, sx, by - c.h * s, !faceRight, 255); g_variant = 0; return; }
+    }
+    const Spr* flockBird = mod >= 0 ? creatureModSprite(mod, fleeing, s, (int)(e * 10.f)) : nullptr;   // one bird, for the whole flock
     if (c.kind == CR_DUCK && (c.variant == 1 || (c.variant == 2 && (c.seed & 1)))) {   // a heron in the marsh; a white crane in the garden
         if (c.h > 0.05f) drawSpriteI(HERON_FLY, 4, sx, by - c.h * s, spriteK(0.35f * s, 4), !faceRight);
         else drawSpriteI(HERON, 10, sx, by, spriteK(1.f * s, 10), !faceRight);
@@ -2353,7 +2589,7 @@ static void drawCritter(const FieldCritter& c) {
         float fadeA = fleeing ? clampf(1.f - c.fleeT / 6.f, 0.f, 1.f) : 1.f;
         g_alpha = fadeA;
         g_variant = 7;
-        drawCritterSprite(true, sx, by, 1.7f * s, !faceRight);
+        drawDeer(c, sx, by, 1.7f * s, !faceRight, SEX_BUCK);           // the stag
         for (int k = 0; k < 18; k++) {                                // a faint shimmer around it
             uint32_t gg = hash32((uint32_t)k * 0x9E37u + (uint32_t)(g_t * 4.f));
             int gx = (int)sx + (int)(((gg & 255) / 255.f - 0.5f) * 1.8f * s), gy = (int)by - (int)(((gg >> 8) & 255) / 255.f * 1.7f * s);
@@ -2368,7 +2604,7 @@ static void drawCritter(const FieldCritter& c) {
             float ox = (k - 1.5f) * 1.6f * s + sinf(k * 2.3f) * 0.4f * s;
             float hop = fleeing ? fabsf(sinf(fe * 9.f + k)) * 0.35f * s : 0.f;
             g_variant = 1;
-            drawCritterSprite(true, sx + ox, by - hop - (k & 1), 1.5f * s * (0.85f + 0.05f * k), !faceRight);
+            drawDeer(c, sx + ox, by - hop - (k & 1), 1.5f * s * (0.85f + 0.05f * k), !faceRight, SEX_BUCK);   // caribou: cows carry antlers too
         }
         g_variant = 0;
         return;
@@ -2380,6 +2616,7 @@ static void drawCritter(const FieldCritter& c) {
             float lift = fleeing ? fe * fe * (1.f + b * 0.3f) * s : 0.3f * s;
             bool flap = ((int)(g_t * 9.f) + b) & 1;
             int x = (int)(sx + ox), y = (int)(by - lift - 0.6f * s);
+            if (flockBird) { blitSpr(creatureModSprite(mod, fleeing, s, (int)(e * 10.f) + b), (float)x, (float)y + 1, b & 1, 255); continue; }
             uint8_t c1 = R_ACCENT + PC[b];
             put(x, y, c1); put(x + 1, y, c1); put(x - 1, y - (flap ? 1 : 0), c1); put(x + 2, y - (flap ? 1 : 0), c1);
             if (!fleeing && flap) put(x, y + 1, R_ACCENT + A_YEL);
@@ -2403,7 +2640,7 @@ static void drawCritter(const FieldCritter& c) {
                 float b = ph < 1.5f ? ph / 1.5f : ph < 3.f ? 1.f : ph < 4.5f ? 1.f - (ph - 3.f) / 1.5f : 0.f;
                 g_bowRows = 11; g_bowDy = (int)(b * 4.f + 0.5f);
             }
-            drawCritterSprite(true, sx, by - hop, (c.variant == 4 ? 2.f : 1.5f) * s, !faceRight);   // an elk stands taller
+            drawDeer(c, sx, by - hop, (c.variant == 4 ? 2.f : 1.5f) * s, !faceRight);   // an elk stands taller
             g_bowRows = 0; g_bowDy = 0;
         } break;
         case CR_LIZARD:
@@ -2432,8 +2669,9 @@ static void drawCritter(const FieldCritter& c) {
                 float lift = fleeing ? fe * fe * (1.2f + b * 0.3f) * s : 0.f;
                 bool flap = fleeing ? (((int)(g_t * 10.f) + b) & 1) : false;
                 float bob = fleeing ? 0.f : (sinf(g_t * 6.f + b) > 0.6f ? 0.05f * s : 0.f);
-                if (fleeing) drawSpriteI(flap ? BIRD_UP : BIRD_DN, 3, sx + ox, by - lift - bob, 1, false);
-                else put((int)(sx + ox), (int)(by - 1 + bob), R_ACCENT + A_BIRD);
+                if (flockBird) blitSpr(creatureModSprite(mod, fleeing, s, (int)(e * 10.f) + b), sx + ox, by - lift - bob, b & 1, 255);
+                else if (fleeing) drawSpriteI(flap ? BIRD_UP : BIRD_DN, 3, sx + ox, by - lift - bob, 1, false);
+                else if (!flockBird) put((int)(sx + ox), (int)(by - 1 + bob), R_ACCENT + A_BIRD);
             }
             break;
         case CR_BUTTERFLY: {
@@ -2519,13 +2757,14 @@ static void drawObjects() {
         float sx = floorf(W * 0.5f + rel * PXR + 0.5f), by = floorf(HOR + ZK / rng + 0.5f), s = PXR / rng;
         if (s < 40.f) s = exp2f(floorf(log2f(s) * 12.f + 0.5f) / 12.f);    // mid/far: size in 6% steps
         float sunRel = wrapPi(SUN_AZ - app);
+        g_objBearing = app;
         Lighting Lg;
         Lg.side = sinf(sunRel);
         Lg.back = cosf(sunRel) * lowSun * sunVis > 0.45f;
         Lg.far = rng > 11.f * (1.f - 0.6f * g_scene.fog);
         float gustNow = g_scene.gust * (0.55f + 0.45f * sinf(g_t * (1.1f + (o.seed & 7) * 0.07f) + ((o.seed >> 8) & 255) * 0.025f));
         float hgt = o.type == OBJ_PINE || o.type == OBJ_BROAD ? o.a : 1.f;
-        Lg.sway = gustNow * 0.06f * hgt * s;
+        Lg.sway = gustNow * 0.06f * hgt * s * tanhf(g_windLat * 3.f);   // trees lean downwind (a west wind)
         bool giantObj = (o.type == OBJ_PINE && o.var == 6) || o.type == OBJ_TUNNELTREE;
         g_alpha = giantObj ? 1.f : clampf((FIELD_R - rng) / 5.f, 0.f, 1.f);   // re-dreamt things fade in at the edge (giants just loom out of the haze)
         if (g_alpha <= 0.05f) continue;
@@ -2539,7 +2778,7 @@ static void drawObjects() {
             case OBJ_BIGLEAF: if (rng < 16.f) drawBigLeaf(sx, by, s, o.a, o.seed, gustNow * 2.f); break;
             case OBJ_BUSH:    if (rng < 22.f) drawBush(sx, by, s, o.a, Lg, o.seed); break;
             case OBJ_FLOWERS: if (rng < 10.f) drawFlowers(sx, by, s, o.seed); break;
-            case OBJ_TUFT:    if (rng < (g_fern > 0.5f ? 12.f : 5.f)) drawTuft(sx, by, s, o.seed, gustNow * 2.f); break;
+            case OBJ_TUFT:    if (rng < (g_fern > 0.5f ? 12.f : 5.f)) drawTuft(sx, by, s, o.seed, gustNow * 2.f * tanhf(g_windLat * 3.f)); break;
             case OBJ_LOG:     drawLog(sx, by, s, o.a, o.b, Lg, o.seed); break;
             case OBJ_TUNNELTREE: drawTunnelTree(sx, by, s, o.a, o.radius, Lg, o.seed); break;
             case OBJ_HOLLOWLOG:  drawHollowLog(sx, by, s, o.a, Lg, o.seed); break;
@@ -2559,7 +2798,64 @@ static void drawObjects() {
 }
 
 // ---------------- entry ----------------
+
+#ifdef HOST
+// ---- desktop-only (mockups and tests): draw props at chosen spots into the current frame ----
+void renderDebugBoulder(float sx, float baseY, float s, float sz, uint32_t seed) {
+    Lighting L{}; L.side = 1.f; L.far = false; L.back = false;
+    drawBoulder(sx, baseY, s, sz, L, seed);
+}
+void renderDebugCritter(uint8_t kind, float dist, float rel, bool faceRight, uint8_t variant, uint32_t seed, uint8_t sex, uint8_t mood, bool fleeing, bool away) {
+    FieldCritter c{}; c.on = true; c.kind = kind; c.variant = variant; c.faceRight = faceRight; c.sex = sex; c.mood = mood; c.mom = -1; c.fleeing = fleeing; c.awayFlee = away; c.fleeT = 0.3f;
+    c.x = g_camX + dist * cosf(g_yaw + rel); c.y = g_camY + dist * sinf(g_yaw + rel);
+    c.t0 = g_t - 3.f; c.idleT = 0.f; c.seed = seed;
+    drawCritter(c);
+}
+#endif
+// A planet mod's way in: the address of one colour (3 floats, 0..255). Groups: accent[16], creature[16],
+// aurora[7], base:<rock|rock2|snow|hills|grass|leaf|bark|water|stone>, sky[<key>].<zenith|horizon|glow|
+// cloud_dark|cloud_lit|sun|ambient|key|fog>. nullptr if there's no such colour.
+static Key* s_keysRW = nullptr;
+int renderSkyKeys() { return NKEYS; }
+template <class T> static T* writable(const T*& ptr, const T* def, size_t bytes) {   // a planet mod's own copy, made on first change
+    if (ptr == def) { T* c = (T*)memSlow(bytes); if (!c) return nullptr; memcpy(c, def, bytes); ptr = c; }
+    return const_cast<T*>(ptr);
+}
+float* renderColourSlot(const char* group, int i, const char* field) {
+    if (!strcmp(group, "accent")) { C3* a = i >= 0 && i < 16 ? writable(g_accent, ACCENT_DEF, sizeof ACCENT_DEF) : nullptr; return a ? &a[i].r : nullptr; }
+    if (!strcmp(group, "creature")) { C3* a = i >= 0 && i < 16 ? writable(g_fauna, FAUNA_DEF, sizeof FAUNA_DEF) : nullptr; return a ? &a[i].r : nullptr; }
+    if (!strcmp(group, "aurora")) { C3* a = i >= 0 && i < 7 ? writable(g_aurora, AURORA_DEF, sizeof AURORA_DEF) : nullptr; return a ? &a[i].r : nullptr; }
+    if (!strcmp(group, "base")) {
+        static const char* const N[] = {"rock", "rock2", "snow", "hills", "grass", "leaf", "bark", "water", "stone"};
+        int k = 0;
+        while (k < 9 && strcmp(field, N[k])) k++;
+        if (k == 9) return nullptr;
+        BaseCols* b = writable(g_base, &BASE_DEF, sizeof BASE_DEF);
+        if (!b) return nullptr;
+        C3* const V[] = {&b->rock, &b->rock2, &b->snow, &b->hill, &b->grass, &b->leaf, &b->bark, &b->water, &b->stone};
+        return &V[k]->r;
+    }
+    if (!strcmp(group, "sky")) {
+        if (i < 0 || i >= NKEYS) return nullptr;
+        if (!s_keysRW) {                                              // the first change: our own copy of the keys
+            s_keysRW = (Key*)memSlow(sizeof(KEYS));
+            if (!s_keysRW) return nullptr;
+            memcpy(s_keysRW, KEYS, sizeof(KEYS));
+            g_keys = s_keysRW;
+        }
+        Key& k = s_keysRW[i];
+        static const char* const F[] = {"zenith", "horizon", "glow", "cloud_dark", "cloud_lit", "sun", "ambient", "key", "fog"};
+        C3* const V[] = {&k.zen, &k.hor, &k.glow, &k.cDark, &k.cLit, &k.sun, &k.amb, &k.key, &k.fog};
+        for (int f = 0; f < 9; f++) if (!strcmp(field, F[f])) return &V[f]->r;
+        return nullptr;
+    }
+    return nullptr;
+}
+float renderSkyKeyTime(int i) { return i >= 0 && i < NKEYS ? g_keys[i].t : 0.f; }
+
 void renderInit() {
+    buildGrassTex();
+    creaturesBuiltIn(spriteColor, antlerColour);
     if (!s_rayT) s_rayT = (uint8_t*)allocScratch(RAY_NB * RAY_NR);
     for (int r = 0; r <= 16; r++)
         for (int dy = 0; dy <= r; dy++) {
@@ -2573,10 +2869,13 @@ float sunElevation(float tod) { return sampleKey(tod).elev; }
 
 static void drawFishing();
 static void drawBugs();
+static void drawAlignGrid();
+static void drawFlashlight();
 void renderFrame(float yaw, float distance, float speed, float timeSec) {
     const Scene& sc = g_scene;
     SUN_AZ = sc.sunAz;
     MOON_AZ = sc.sunAz + PI_F;                                        // the moon rides opposite the sun
+    g_windLat = -sinf(yaw);                                           // wind toward the east: right when facing north
     g_pan = (int)lroundf(yaw * PXR);
     g_yaw = g_pan / PXR;                                            // the view scrolls in whole pixels
     g_dist = distance; g_t = timeSec;
@@ -2588,9 +2887,10 @@ void renderFrame(float yaw, float distance, float speed, float timeSec) {
     sunVis = clampf((S.elev + 0.12f) / 0.1f, 0.f, 1.f) * cover * (1.f - sc.rain * 0.8f);
     lowSun = clampf(1.f - S.elev / 0.45f, 0.f, 1.f) * sunVis;
     sunX = W * 0.5f + wrapPi(SUN_AZ - yaw) * PXR;
-    sunY = HOR - 5.f - S.elev * 80.f;
+    sunY = HOR - 5.f - sunPathElevation(sc.tod) * PXR;              // its true height: up out of view through the middle of the day
     s_rainbowSwap = sc.rainbow > 0.02f && S.night < 0.3f && fabsf(wrapPi(SUN_AZ - yaw)) > FOV * 0.5f + 0.35f;
     biomeRamps();
+    s_flashWarm = s_flashOn && (S.elev < 0.03f || g_scene.cloud > 0.8f || g_scene.storm > 0.4f) && !s_rainbowSwap;
     buildPalette();
 
     computeColumns();
@@ -2621,7 +2921,9 @@ void renderFrame(float yaw, float distance, float speed, float timeSec) {
     drawBolt();
     drawRain();
     drawBugs();
-    drawFishing();                         // the rod is in your hands: nearest of all
+    drawFlashlight();                      // the hand-light, before the rod (the rod is behind it)
+    drawFishing();
+    drawAlignGrid();                       // calibration overlay, above everything                         // the rod is in your hands: nearest of all
 
     float walk = clampf(speed * 2.5f, 0.f, 1.f);
     s_bob = (int)(fabsf(sinf(distance * 2.2f)) * 2.f * walk + 0.5f);
@@ -2755,7 +3057,7 @@ static void drawFishing() {
     }
     bool fight = F.state == FS_FIGHT;
     float ang = fight ? F.fishAng : F.castYaw;
-    float z = fight ? fmaxf(1.4f, F.lineOut) : F.bobZ;
+    float z = fight ? fmaxf(F.shoreZ, F.lineOut) : F.bobZ;           // the line always cuts the water, never the bank
     float wx = W * 0.5f + wrapPi(ang - g_yaw) * PXR, wy = HOR + ZK / z;
     float out = F.rodOut * F.rodOut * (3.f - 2.f * F.rodOut);
     float bend = fight ? fminf(1.f, F.tension) : (F.biting ? 0.35f : 0.f);
@@ -2804,6 +3106,93 @@ static void drawFishing() {
     for (int dy = -4; dy <= 4; dy++) for (int dx = -4; dx <= 4; dx++) if (dx * dx + dy * dy <= 16) put(rx + dx, ry + dy, dx * dx + dy * dy <= 4 ? R_CLOUD + 6 : R_CLOUD + 9);
     float spin = g_t * (fight ? 4.f + 14.f * F.reel : 0.f);
     put(rx + (int)lroundf(cosf(spin) * 3.f), ry + (int)lroundf(sinf(spin) * 3.f), R_CLOUD + 15);    // the handle going round
+}
+
+float renderFov() { return FOV; }
+
+void renderSetAlign(bool on, float sum) { s_alignOn = on; s_alignSum = sum; }
+void renderSetFlashlight(bool on) { s_flashOn = on; }
+bool renderFlashlight() { return s_flashOn; }
+
+// A warm hand-light projected from the camera: a pool on the ground a few metres ahead, a softer cone above
+// it, falling off with distance. Inside it every surface keeps its own brightness and texture but is re-lit
+// in warm light (greens stay greenish, everything else goes amber); rain and snow sparkle as they cross it,
+// and in fog or a storm you see the beam itself. In daylight it does nothing you'd notice.
+static void drawFlashlight() {
+    if (!s_flashOn || !s_flashWarm) return;
+    const uint8_t* pal = framePaletteRGB();
+    static uint8_t lum8[256]; static uint8_t green[256];
+    for (int i = 0; i < 256; i++) {
+        const uint8_t* c = pal + i * 3;
+        lum8[i] = (uint8_t)((c[0] * 77 + c[1] * 150 + c[2] * 29) >> 8);
+        green[i] = c[1] > c[0] + 8 && c[1] >= c[2];
+    }
+    const Scene& sc = g_scene;
+    const float haze = clampf(sc.fog + sc.rain * 0.8f + sc.storm * 0.5f, 0.f, 1.f);
+    const float cx = W * 0.5f, cy = HOR + 10.f, rx = 46.f, ry = 34.f;   // one oval of light where you're looking
+    for (int y = (int)(cy - ry * 1.5f); y < H; y++) {
+        if (y < 0) continue;
+        float att = 1.f;
+        if (y > HOR) { float z = ZK / (y - HOR + 0.5f); att = clampf(1.5f - z / 12.f, 0.35f, 1.f); }   // the ground: nearer is brighter
+        else att = 0.42f;                                                 // above the horizon it's mostly far away
+        float vy = (y - cy) / ry;
+        for (int x = 0; x < W; x++) {
+            float vx = (x - cx) / rx;
+            float d = vx * vx + vy * vy;
+            float core = d < 1.f ? (1.f - d) * (1.f - d) : 0.f;
+            float halo = d < 2.f ? (1.f - d / 2.f) * (1.f - d / 2.f) * 0.3f : 0.f;   // a soft spill around it
+            float Lt = fmaxf(core * 1.3f, halo) * att;
+            if (Lt < 0.06f) continue;
+            uint8_t& p = fb[y * W + x];
+            if (p >= R_SUN && p < R_SUN + 16) continue;                 // the moon and stars stay as they are
+            bool sky = p < R_CLOUD, cloudy = p >= R_CLOUD && p < R_SUN;
+            if (sky || (cloudy && y < HOR && p < R_CLOUD + 8)) {        // air: the beam itself shows in fog and rain
+                if (haze > 0.05f && dith(x, y) < Lt * 0.3f * haze) p = R_WATER + R_SUN + 8 + 3;
+                continue;
+            }
+            float l = lum8[p] / 255.f;
+            float nl = clampf(l * (1.f + 2.2f * Lt) + 0.3f * Lt + (cloudy ? 0.25f * Lt : 0.f), 0.f, 0.999f);   // rain and snow catch it brightly
+            uint8_t warm = (uint8_t)(R_WATER + R_SUN + (green[p] ? 0 : 8) + (int)(nl * 8.f));
+            if (Lt >= 0.32f || dith(x, y) < (Lt - 0.06f) / 0.26f) p = warm;   // a soft rim
+        }
+    }
+}
+
+// Two ground grids in flat diagnostic red and green: radial lines every 15 degrees (straight up the
+// screen in this projection) and rings at set distances. Green is fixed to the world; red stays where
+// the world was when the drag began. Dashed, flat, unlike anything in the art.
+static void drawAlignGrid() {
+    if (!s_alignOn) return;
+    const uint8_t RED = R_ACCENT + A_LAV, GREEN = R_ACCENT + A_BLUE;   // these two slots are recoloured while aligning
+    static const float RINGS[] = {2.f, 3.f, 4.5f, 7.f, 11.f, 18.f, 30.f};
+    for (int pass = 0; pass < 2; pass++) {                         // red first, green over it
+        uint8_t c = pass == 0 ? RED : GREEN;
+        float off = pass == 0 ? s_alignSum : 0.f;
+        for (int k = 0; k < 24; k++) {
+            float a = k * 0.2617994f;
+            float rel = wrapPi(a + off - g_yaw);
+            if (fabsf(rel) > FOV * 0.5f + 0.02f) continue;
+            int x = (int)lroundf(W * 0.5f + rel * PXR);
+            for (int y = HOR + 2; y < H; y++) if (((y + pass) & 1) == 0) put(x, y, c);
+        }
+        for (float z : RINGS) {
+            int y = (int)lroundf(HOR + ZK / z);
+            if (y <= HOR || y >= H) continue;
+            for (int x = 0; x < W; x++) {
+                int wx = x + (pass == 0 ? (int)lroundf(-s_alignSum * PXR) : 0) + g_pan;   // dashes travel with their grid
+                if (((wx >> 1) & 1) == 0) put(x, y + pass, c);
+            }
+        }
+    }
+    float deg = fabsf(s_alignSum) * 57.29578f;                      // how far you've slid it, in degrees
+    int n = (int)(deg + 0.5f);
+    int w = n >= 100 ? 12 : n >= 10 ? 8 : 4;
+    int x0 = W / 2 - (w + 4) / 2;
+    for (int y = 1; y < 9; y++) hspan(x0 - 2, x0 + w + 5, y, R_ACCENT + A_SIL);
+    hspan(x0, x0 + 2, 4, s_alignSum >= 0.f ? GREEN : RED);           // a sign bar: - in red, + in green
+    if (s_alignSum >= 0.f) for (int y = 3; y <= 5; y++) put(x0 + 1, y, GREEN);
+    drawNumber(x0 + 4, 2, n, GREEN);
+    put(x0 + w + 4, 2, GREEN);                                       // the degree mark
 }
 
 void renderFps(int fps) {
