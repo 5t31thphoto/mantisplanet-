@@ -25,7 +25,7 @@ static Fight TIERS[4] = {
     {0.62f, 3.2f, 0.26f, 1.05f, 0.14f, 2.1f, 0.85f},    // rare: needs real control
     {0.74f, 4.4f, 0.40f, 1.35f, 0.22f, 1.7f, 0.7f},     // legendary
 };
-static float K_REEL_A = 0.2f, K_REEL_B = 0.25f, K_BREAK = 2.6f, K_DRAG = 0.85f;   // the drag slips before the line breaks
+static float K_REEL_A = 0.2f, K_REEL_B = 0.25f, K_BREAK = 2.6f, K_DRAG = 0.85f;
 static float s_fightT = 0.f, s_throw = 0.f;
 static bool s_waterRules = true;               // off only for balance simulations (no real lake around them)
 static float s_lastYaw = 0.f, s_turnRecent = 0.f;     // a deliberate turn, not slow drift, is what puts the rod away
@@ -140,7 +140,7 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
     V.ease = clampf((pitchDeg - 6.f) / 20.f, 0.f, 1.f);            // lean forward: give line
     bool flick = flickDps > 150.f;
     float away = fabsf(wrapPi(yaw - V.castYaw));
-    {   // how briskly you've been turning: a deliberate turn is fast (tens of degrees a second); gyro drift is slow
+    {
         float rate = dt > 0.f ? fabsf(wrapPi(yaw - s_lastYaw)) / dt : 0.f;
         s_lastYaw = yaw;
         s_turnRecent = rate > 0.26f ? 1.5f : fmaxf(0.f, s_turnRecent - dt);   // > ~15 deg/s within the last 1.5 s
@@ -151,7 +151,7 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
             if (V.t > 0.8f) { enter(FS_WAIT); s_waitT = 0.f; s_nextBite = biteDelay(sc); s_nibbles = (int)(frand() * 3.5f); s_nextNibble = s_nextBite - s_nibbles * (0.9f + frand()) ; sfxFish(FISH_PLOP, 0.f); }
             break;
         case FS_WAIT: {
-            if (away > 0.6f && s_turnRecent > 0.f) { enter(FS_STOW); sfxFish(FISH_STOW, 0.f); break; }   // you turned away: put the rod away (slow drift never does)
+            if (away > 0.6f && s_turnRecent > 0.f) { enter(FS_STOW); sfxFish(FISH_STOW, 0.f); break; }
             s_waitT += dt;
             V.nibble = fmaxf(0.f, V.nibble - dt * 5.f);
             V.dip = fmaxf(0.f, V.dip - dt * 3.f);
@@ -205,7 +205,6 @@ void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float fl
             if (V.jump > 0.f && V.tension > 0.7f) s_throw += (V.tension - 0.7f) * 2.4f * dt;
             else s_throw = fmaxf(0.f, s_throw - dt);
             if (s_throw > 0.35f) { V.lostWhy = 2; enter(FS_LOST); hx::fishTension(0.f, 0.f, false); sfxFish(FISH_MISS, 0.f); break; }
-            // you: reel against it, or give line; facing the fish gives you control
             float mis = fabsf(wrapPi(V.fishAng - yaw));
             float control = clampf(1.f - mis / 1.2f, 0.3f, 1.f);
             V.lineSpeed = pull * 2.2f * (1.f + V.ease) - V.reel * 2.4f * control * (1.f - 0.4f * pull) - 0.25f;   // a strong fish is hard to gain on

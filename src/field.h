@@ -1,11 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// The near field: everything you can walk up to. It lives in a small local plane centred on
-// you (radius FIELD_R). Walking shifts it, turning just changes which part you look at.
-// Whatever falls out behind you is forgotten and re-dreamt at the far edge ahead, seeded by
 // the biome fields at that direction and distance, so the only thing that persists is what
-// is around you right now.
 
 namespace mantis {
 
@@ -14,7 +10,7 @@ enum ObjType : uint8_t {
 };
 
 struct FieldObj {
-    float x, y;        // metres-ish, player at origin, +x = world angle 0
+    float x, y;
     float a, b;        // type sizes (height / crown, width / height ...)
     float radius;      // collision radius for solid objects
     uint32_t seed;
@@ -25,9 +21,7 @@ struct FieldObj {
 };
 
 enum : uint8_t { CR_DEER, CR_RABBIT, CR_BIRDS, CR_BUTTERFLY, CR_DUCK, CR_BEAVER, CR_SQUIRREL, CR_KOI, CR_LIZARD, CR_KINDS };
-// Deer moods. All deer: graze, alert, walk, approach (if you hold still). Does also: stomp (suspicious, tail
 // up), sniff (close, nose out), show (turned away: the white rump, the tail flicking and flagging), nurse (a
-// fawn tucked under her), pet (you tapped her: her nose to your hand).
 enum : uint8_t { DEER_GRAZE, DEER_ALERT, DEER_WALK, DEER_STOMP, DEER_SNIFF, DEER_NURSE, DEER_APPROACH, DEER_SHOW, DEER_PET };
 struct FieldCritter {
     bool on;
@@ -44,7 +38,9 @@ struct FieldCritter {
     uint8_t variant;   // 1: the north / marsh version; 2: the garden's; 3: the canyon's (mule deer, jackrabbit, roadrunner)
     uint8_t sex;       // deer: 0 doe, 1 buck, 2 fawn
     uint8_t mood;      // deer: see DEER_* below
-    bool awayFlee;     // fleeing straight away from you (seen from behind), not across
+    bool awayFlee;
+    bool willTurn;     // straight-away flight that breaks off to the side
+    float turnT;       // flight time (s) at which it breaks off
     float moodT;       // seconds left in this mood
     int8_t mom;        // a fawn: its mother's slot (-1: none)
 };
@@ -56,22 +52,20 @@ constexpr int FIREFLY_N = 40;
 constexpr int   FIELD_N = 340;
 constexpr float FIELD_R = 34.f;
 constexpr float BODY_R  = 0.42f;
-constexpr float LAKE_STOP = 3.2f;   // how far ahead the shore stops you
+constexpr float LAKE_STOP = 3.2f;
 
 void fieldInit(float yaw, float distance);
 
 // Try to walk `ds` along heading `yaw`. Solid things in the way are slid around; a shore stops
-// you. Returns the distance actually covered; *bumped is set when something got in the way.
 float fieldStep(float yaw, float ds, float distance, bool* bumped);
 
 // Encounters (critters) and their timing. Standing still invites them closer; walking spooks them.
-// Returns how many critters bolted this frame; fieldBolt(i) says which kind and how far (for sound and motor).
 int fieldTick(float yaw, float distance, float timeSec, float dt, float speed, float stillFor);
 void fieldBolt(int i, uint8_t& kind, float& dist);
 
 const FieldObj*     fieldObjects();
 const FieldCritter* fieldCritters();     // CRIT_N slots
-bool fieldTryPet();                      // a tap with a doe close in front of you, while you're still: she reaches to your hand
+bool fieldTryPet();
 const Firefly*      fieldFireflies();
 float               rockFieldAt(float angle, float D);
 float               fieldNearestFalls();      // metres to the nearest waterfall (999 if none)

@@ -85,7 +85,6 @@ static void defineBiomes() {
         { const int G[4][3] = {{14, 46, 40}, {38, 88, 48}, {86, 138, 60}, {150, 186, 92}}; ramp(b->grass, G); }
         { const int K[4][3] = {{40, 18, 20}, {110, 46, 34}, {168, 84, 52}, {214, 138, 92}}; ramp(b->bark, K); }
     // the sunset coast (west): dune grass and sea cliffs, then the open sea filling the west, where the sun sets;
-    // surf, gulls, a whale at golden hour, a lighthouse at night. You stop at the water's edge.
     b = &DEF[B_COAST];    b->forest = 0.12f; b->forestVar = 0.2f; b->pine = 0.7f; b->lakes = -1.f; b->creeks = 0.2f; b->rocks = 0.55f;
                           b->mist = 0.15f; b->wet = 0.05f; b->flowers = 0.7f; b->wind = 0.3f; b->squirrels = 0.f; b->ocean = 1.f;
         { const int G[4][3] = {{60, 72, 56}, {120, 132, 80}, {180, 182, 118}, {224, 220, 170}}; ramp(b->grass, G); }
@@ -141,8 +140,7 @@ static int s_streak = 0, s_streakOct = -1;
 static inline float hashf01(uint32_t x) { return (hash32(x) >> 8) * (1.f / 16777216.f); }
 
 static uint8_t pickOrdinary(int i, int octant, uint8_t avoid) {
-    // the climate leans with your heading: north and west wetter and wilder, south and east more open
-    float w[B_ORDINARY_N] = {1.f, 1.f, 0.8f, 0.8f, 0.7f, 0.8f, 0.6f, 0.7f, 0.f};   // snow only when you head north
+    float w[B_ORDINARY_N] = {1.f, 1.f, 0.8f, 0.8f, 0.7f, 0.8f, 0.6f, 0.7f, 0.f};
     if (octant >= 0) {
         float ang = octant * 0.7853982f;
         float north = -sinf(ang), west = -cosf(ang);           // octant 0 = east; bearings grow toward the south
@@ -152,7 +150,7 @@ static uint8_t pickOrdinary(int i, int octant, uint8_t avoid) {
         w[B_MEADOW] += 0.5f * fmaxf(0.f, -north);
         w[B_LAKES] += 0.4f * fmaxf(0.f, -west);
         w[B_BIRCH] += 0.7f * fmaxf(0.f, north);
-        w[B_TAIGA] += 1.4f * fmaxf(0.f, north - 0.3f);           // the cold only when you're really heading north
+        w[B_TAIGA] += 1.4f * fmaxf(0.f, north - 0.3f);
         w[B_AUTUMN] += 0.4f * fmaxf(0.f, west) + 0.3f * fmaxf(0.f, north);
         w[B_MARSH] += 0.5f * fmaxf(0.f, -west) + 0.3f * fmaxf(0.f, -north);
     }
@@ -170,7 +168,7 @@ void journeyInit(uint32_t seed, float distance) {
     s_seed = hash32(seed ^ 0x10A2E7u);
     s_start[0] = distance - 50.f;
     for (int i = 0; i < MAXSEG; i++) s_start[i + 1] = s_start[i] + 900.f + hashf01(s_seed + (uint32_t)i * 7919u) * 600.f;
-    s_biome[0] = hashf01(s_seed) < 0.5f ? B_MEADOW : B_FOREST;     // the dream begins somewhere gentle
+    s_biome[0] = hashf01(s_seed) < 0.5f ? B_MEADOW : B_FOREST;
     for (int i = 1; i < MAXSEG; i++) s_biome[i] = pickOrdinary(i, -1, s_biome[i - 1]);
     s_cur = 0;
     s_hx = s_hy = s_hlen = 0.f;
@@ -211,8 +209,7 @@ void journeyUpdate(float distance, float yaw, float moved) {
             if (sp != 255 && ((oct - s_streakOct + 9) % 8) <= 2 && s_biome[s_cur + 1] != sp) { s_biome[s_cur + 1] = sp; s_gen++; }
         }
     }
-    while (s_cur < i) {                                       // we've crossed into the next biome
-        // how straight was the heading through the biome we just left?
+    while (s_cur < i) {
         float straight = s_hlen > 1.f ? sqrtf(s_hx * s_hx + s_hy * s_hy) / s_hlen : 0.f;
         int oct = -1;
         if (straight > 0.45f) {
@@ -222,7 +219,6 @@ void journeyUpdate(float distance, float yaw, float moved) {
         if (oct >= 0 && (s_streakOct < 0 || ((oct - s_streakOct + 9) % 8) <= 2)) { s_streak++; s_streakOct = oct; }
         else { s_streak = oct >= 0 ? 1 : 0; s_streakOct = oct; }
         s_cur++;
-        // after a special, back to a random ordinary biome; otherwise the next leans with your heading
         if (s_biome[s_cur] >= B_ORDINARY_N) { s_streak = 0; s_streakOct = -1; }
         s_gen++;
         if (s_cur + 1 < MAXSEG) s_biome[s_cur + 1] = pickOrdinary(s_cur + 1, s_streakOct, s_biome[s_cur] < B_ORDINARY_N ? s_biome[s_cur] : (uint8_t)B_MEADOW);

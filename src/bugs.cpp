@@ -54,7 +54,7 @@ void baitSelect(int k) {
 bool baitFound(uint8_t k) { return k < BAIT_KINDS && ((s_found >> k) & 1u); }
 void baitAdd(uint8_t k, int n) { if (k < BAIT_KINDS) { s_count[k] += n; if (s_count[k] > 255) s_count[k] = 255; if (n > 0) s_found |= 1u << k; } }
 
-void baitCycle() {                                          // none -> each bait you have -> none
+void baitCycle() {
     int k = s_sel;
     for (int step = 0; step <= BAIT_KINDS; step++) {
         k++;
@@ -125,7 +125,7 @@ void bugsUpdate(float dt, float yaw, float distance, float speed, const Scene& s
         if (b.caught) { if (s_t - b.caughtT > 0.6f) b.on = false; continue; }
         float px = -b.y / (d + 1e-3f) * b.dir, py = b.x / (d + 1e-3f) * b.dir;
         switch (b.kind) {
-            case BAIT_CRICKET: case BAIT_HOPPER: {                       // sits still, then a hop (sooner if you come close)
+            case BAIT_CRICKET: case BAIT_HOPPER: {
                 b.hopT -= dt;
                 if (b.hopT <= 0.f) { b.hopT = (speed > 0.1f && d < 2.5f) ? 0.5f : 2.f + frand() * 4.f; b.hopLeft = 0.3f; b.dir = frand() < 0.5f ? -1 : 1; }
                 if (b.hopLeft > 0.f) { b.hopLeft -= dt; b.x += px * 1.6f * dt; b.y += py * 1.6f * dt; b.h = 0.2f * sinf((0.3f - b.hopLeft) / 0.3f * 3.14159f); }
@@ -154,7 +154,7 @@ bool bugsTryCatch(int x, int y) {
             b.caught = true; b.caughtT = s_t;
             if (s_count[b.kind] < 255) s_count[b.kind]++;
             s_found |= 1u << b.kind;                         // a new kind for the collection
-            if (s_sel < 0) s_sel = b.kind;                      // your first bait goes straight on the hook
+            if (s_sel < 0) s_sel = b.kind;
             save();
             sfxFish(FISH_BUG, 0.f);
             hx::fishTick(0.6f);

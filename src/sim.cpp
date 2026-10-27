@@ -41,7 +41,6 @@ static float s_sampleDt = 1.f / 100.f;                    // refined from the me
 static uint32_t s_rateT0 = 0, s_rateN = 0;
 // Bias learning from windows of samples: the spread (variance) of the gyro and accelerometer says how still
 // the unit is, not the gyro's size (which is the bias itself). TABLE: truly at rest, 1 s. HAND: held calmly,
-// 2 s, and only if it agrees with what we have (within 0.3 deg/s): a slow deliberate turn can't pass as bias.
 struct Win { float t; int n; V3 gm, gm2, am, am2; float an, vm, vm2; };
 static Win s_win;
 static float s_biasUnc = 1.f;                             // how unsure the bias is (deg/s): sets how far a hand reading may disagree
@@ -50,12 +49,9 @@ static constexpr int TBINS = 60, TBASE = 10;              // 10..69 C
 struct TBin { V3 b; float w; };
 static TBin s_tab[TBINS];
 static float s_tempC = -100.f, s_tempLearnC = -100.f, s_tempT = 0.f;
-static float s_fwdSign = 1.f, s_fwdLearn = 0.f;   // which way is forward: learned from how you tip to walk
+static float s_fwdSign = 1.f, s_fwdLearn = 0.f;
 static float s_pitchDeg = 0.f, s_flickDps = 0.f;
-// Drift you've corrected by hand. Sliding the world back into line on the screen is a real measurement
-// (you know where you're facing): the correction over the moving time since the last one is the drift
 // that got past the gyro bias learners. It's applied only while the gyro is integrating (moving), at
-// the same rate it was measured.
 static float s_userRate = 0.f;      // deg/s added to the heading while integrating
 static float s_activeT = 0.f;       // integrating seconds since the last alignment
 static float s_dragSum = 0.f;       // radians slid during the current drag
@@ -146,7 +142,6 @@ void initControls() {
     s_sampleDt = 1.f / 100.f; s_rateT0 = 0; s_rateN = 0;
 }
 
-// ---- time-based versions of the per-update constants the controls were tuned with (at ~20 updates/s) ----
 static constexpr float REF_DT = 0.033333f;
 static inline float perDt(float kRef, float dt) { return 1.f - powf(1.f - kRef, dt / REF_DT); }
 
@@ -184,7 +179,6 @@ static void windowAdd(V3 w, V3 a, float an, float dt) {
         }
     }
     if (W.t >= 2.f) {
-        // Held in the hand: tremor averages away over two seconds, bias doesn't. If the hand was calm enough
         // and the leftover vertical rate is small, that leftover is bias: fold it out along the vertical.
         // How small: up to 1 deg/s while the bias is uncertain, tightening to 0.3 deg/s once it's well known,
         // so a slow deliberate turn can't be taken for bias.
@@ -203,7 +197,6 @@ static void windowAdd(V3 w, V3 a, float an, float dt) {
     s_biasUnc = fminf(1.f, s_biasUnc + dt * 0.0005f);              // confidence fades slowly (~0.03 deg/s a minute)
 }
 
-// As the chip warms or cools, lean the bias toward what it was at this temperature before.
 static void tempFollow(float dt) {
     if (s_tempC < TBASE || s_tempC >= TBASE + TBINS || fabsf(s_tempC - s_tempLearnC) < 1.f) return;
     int c = (int)(s_tempC - TBASE);
@@ -218,14 +211,12 @@ static void tempFollow(float dt) {
 }
 
 // One gyro/accelerometer sample: carry gravity, take the yaw rate about true vertical, learn the bias,
-// integrate the heading. (The same maths as before, run on every sample.)
 static void imuSample(V3 a, V3 w, float dt) {
     float an = len(a);
     V3 an1 = an > 0.2f ? sc(a, 1.f / an) : s_up;
     if (!s_init) { s_up = an1; s_aLP = an1; s_init = true; }
-    s_flickDps = fabsf(w.x - s_bias.x);                            // a flick of the top toward you or away
+    s_flickDps = fabsf(w.x - s_bias.x);
     V3 wc = sub(w, s_bias);
-    // Gravity in the device frame: carried along by the gyro (instant), pulled gently toward the
     // accelerometer (no drift). A vector fixed in the world seen from a turning body: dg = -w x g dt.
     s_up = sub(s_up, cross(sc(wc, DEG2RAD * dt), s_up));
     float trust = perDt(fabsf(an - 1.f) < 0.12f ? 0.05f : 0.006f, dt);   // shaking hands: trust the gyro
@@ -281,8 +272,6 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
     // flash writes pause both cores (a click in the audio): save once when learned, then at most every 30 min
     if (s_learnT > 6.f && (s_savedAt == 0 || millis() - s_savedAt > 1800000u)) { saveBias(); s_savedAt = millis() | 1u; s_learnT = 0.f; }
     if (fresh) {
-        // Throttle: held upright like a window you stand; tip the top away past ~20 deg and you walk,
-        // further = faster. Laid nearly flat (on a table) you stand again.
         float tilt = asinf(fminf(1.f, fabsf(s_aLP.z))) * 57.29578f;       // screen angle from vertical
         float targetSpeed = (tilt > 20.f && tilt < 72.f) ? (tilt - 20.f) / 25.f : 0.f;
         if (targetSpeed > 0.3f) {                                   // learn which way is forward from walking
@@ -292,7 +281,7 @@ void updateControls(float dt, float &outYaw, float &outSpeed, bool &trying) {
         s_pitchDeg = asinf(fmaxf(-1.f, fminf(1.f, s_aLP.z * s_fwdSign))) * 57.29578f;   // + forward, - back
         if (targetSpeed > 1.1f) targetSpeed = 1.1f;
         s_trying = targetSpeed > 0.02f;
-        forwardSpeed += (targetSpeed - forwardSpeed) * (1.f - powf(0.86f, dt / 0.05f));   // the same ease you tuned at 20 fps, at any frame rate
+        forwardSpeed += (targetSpeed - forwardSpeed) * (1.f - powf(0.86f, dt / 0.05f));
         if (!s_trying && forwardSpeed < 0.03f) forwardSpeed = 0.f;
     }
 

@@ -1,12 +1,8 @@
 #pragma once
 #include <stdint.h>
 
-// The journey: biomes are a sequence along your walk, not a map. Each lasts ~1-1.5 km and blends into
-// the next. The director averages your heading through each biome; hold roughly one compass direction
 // through three ordinary biomes and the next is that direction's special biome. After a special, it
-// loops back to a random ordinary one. Nothing is stored beyond the journey you're on.
 //
-// Compass (world azimuth): east = 0, south = +pi/2, west = pi, north = -pi/2 (bearings grow to your right). The sun rises in the east.
 
 namespace mantis {
 
@@ -60,7 +56,7 @@ struct BiomeParams {
     float glowMoss;           // moss that glows faintly at night
     float hush;               // a hushed soundscape and quieter music
     float shafts;             // stronger light shafts
-    float ocean;              // the sea to the west: you can't go past it
+    float ocean;
     float karst;              // pillar mountains in layered mist
     float paddies;            // flooded terraces: still, shallow, wadeable
     float auroraBoost;        // the north: more aurora, reaching higher
@@ -74,17 +70,15 @@ struct BiomeParams {
 };
 
 void journeyInit(uint32_t seed, float distance);
-// Call every frame with what you actually covered and the heading you covered it in.
 void journeyUpdate(float distance, float yaw, float moved);
 // Blended biome parameters at a distance along the journey (cheap; called a lot).
 const BiomeParams& biomeAt(float D);
-// The biome you're in and the one you're blending toward (for display / music).
 uint8_t journeyBiome();
 uint8_t biomeIdAt(float D);    // which biome a distance falls in (previews / tests)
 float biomeStart(float D);     // where the biome containing D begins
 void journeyForce(float D, uint8_t b);   // previews / tests
 uint32_t journeyGeneration();          // bumps whenever the biome plan changes (for caches)
-int journeyStreak();          // how many biomes in a row you've held the current heading
+int journeyStreak();
 int journeyOctant();          // 0 = E, 1 = SE, 2 = S, 3 = SW, 4 = W, 5 = NW, 6 = N, 7 = NE
 // planet mods: the address of one biome ramp colour (3 floats, 0..255); call ColoursChanged after editing
 float* journeyRampSlot(int biome, const char* ramp, int shade);

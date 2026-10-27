@@ -49,7 +49,6 @@ int main(int argc, char** argv) {
     kept += fabsf((yaw - y0) / D2R) / 45.f;
   }
   printf("average hand wander %.2f deg/min, slow turn kept %.0f%% (%d seeds)\n", sum / N, 100.0 * kept / N, N);
-  // the previous controls (v31): 1.90 deg/min, 78% kept. Never worse than that, and keep slow turns.
   bool ok = sum / N < 1.6 && kept / N > 0.95;
   printf("%s\n", ok ? "PASS" : "FAIL");
   return ok ? 0 : 1;

@@ -1,6 +1,4 @@
-// MantisPlanet — a dream you walk through on an M5Stack Core2.
 // The far world is a panorama sampled from (direction, distance walked); the near world is a small
-// transient field around you, forgotten behind you and re-dreamt ahead. Sound runs on core 0, the
 // LCD push on core 0, everything else here on core 1.
 #include <M5Unified.h>
 #include "sim.h"
@@ -70,7 +68,7 @@ static void serviceTouch() {
     auto td = M5.Touch.getDetail();
     uint32_t now = millis();
     if (td.wasPressed()) { touchDown = now; touchX0 = td.x; touchY0 = td.y; longFired = false; aligning = false; }
-    if (td.isPressed() && aligning) {                                    // slide the world under your finger, 1:1
+    if (td.isPressed() && aligning) {
         int dx = td.x - alignLastX;
         alignLastX = td.x;
         if (dx) mantis::controlsAlign(-(dx * 0.5f) * mantis::renderFov() / 160.f);
@@ -121,7 +119,7 @@ void setup() {
     cfg.internal_spk = true;
     cfg.internal_mic = false;                 // the Core2 shares one I2S port: the speaker keeps it
     M5.begin(cfg);
-    mantis::audioSpeakerBegin();                 // claim the speaker's DMA buffers before anything else allocates
+    mantis::audioSpeakerBegin();
     M5.Display.setRotation(1);
     M5.Display.setBrightness(110);
     if (M5.Imu.isEnabled()) {
@@ -130,7 +128,6 @@ void setup() {
     }
 
     mantis::initControls();
-    // A new world every time you wake it, but never one that starts you in the water or boxed in by it.
     for (int tries = 0; tries < 24; tries++) {
         mantis::universeInit(esp_random() | 1u);
         mantis::journeyInit(mantis::worldSeed(), 0.f);
@@ -183,8 +180,6 @@ void loop() {
     }
     fpsAvg += (1.f / dt - fpsAvg) * 0.05f;
 
-    // Walk. Head-on into something solid you stop with a bump and have to find another way;
-    // glancing off the side of it you slide past. A shore stops you too.
     float want = currentSpeed > 0.02f ? currentSpeed * dt * 9.0f : 0.f;
     bool bumped = false;
     float moved = 0.f;
@@ -209,7 +204,7 @@ void loop() {
         if (mantis::jarActive()) mantis::jarTap(tapX, tapY);
         else if (mantis::wallActive()) mantis::wallTap(tapX, tapY);
         else if (mantis::bugsTryCatch(tapX, tapY)) {}                          // a bug first
-        else if (!mantis::fishingActive() && mantis::g_scene.stillFor > 3.f && mantis::fieldTryPet()) { hx::fishTick(0.25f); hx::fishTick(0.15f); }   // a doe close by: her nose to your hand
+        else if (!mantis::fishingActive() && mantis::g_scene.stillFor > 3.f && mantis::fieldTryPet()) { hx::fishTick(0.25f); hx::fishTick(0.15f); }
         else mantis::fishingTap(currentYaw, totalDistance);                   // then the water
     }
     if (!mantis::jarActive()) mantis::fishingUpdate(dt, currentYaw, totalDistance, mantis::controlsPitchDeg(), mantis::controlsFlickDps(), sc);   // fishing waits while the jar is open
@@ -235,12 +230,11 @@ void loop() {
         if (kind == mantis::CR_DEER) hx::hooves(d);
     }
 
-    // Footsteps follow your pace: a slow walk is ~1.3 steps a second, a brisk one ~2.2. Stop and they stop.
     if (walkSpeed > 0.05f) {
         float cadence = 1.3f + 0.9f * fminf(1.f, walkSpeed / 0.8f);
         stepPhase += dt * cadence;
         if (stepPhase >= 1.f) { stepPhase -= 1.f; step(sc.surface, walkSpeed); }
-    } else stepPhase = 0.65f;                     // the first step lands soon after you set off
+    } else stepPhase = 0.65f;
     float beats = mantis::audioBeats();
     // The kick is felt, not heard.
     int beat = (int)floorf(beats);
@@ -253,7 +247,7 @@ void loop() {
     static float lastAwe = 0.f;
     if (sc.awe > 0.6f && lastAwe <= 0.6f) hx::swell();
     static float lastTodH = 0.f;
-    if (sc.japan > 0.5f && lastTodH < 0.715f && sc.tod >= 0.715f) hx::swell();     // feel the temple bell
+    if (sc.japan > 0.5f && lastTodH < 0.715f && sc.tod >= 0.715f) hx::swell();
     lastTodH = sc.tod;
     lastAwe = sc.awe;
     hx::update(dt);

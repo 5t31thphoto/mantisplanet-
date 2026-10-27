@@ -52,6 +52,21 @@ static const char* const P_AWAY[22] = {
     ".......dbbbbbbbbd.......", ".......dbbbwwbbbd.......", "........dbwwwwbd........", "........ddbbbbdd........",
     "........dd....dd........", "........db....bd........", "........db....bd........", "........dd....dd........",
     "........d......d........", "........k......k........"};
+// front three-quarter view, walking toward the viewer (two frames)
+static const char* const P_TOWARD[22] = {
+    "........................", "........................", "...........b...b........", "............b.b.........",
+    "............bbb.........", "...........bbbbb........", "...........kblbk........", "............lll.........",
+    "............lkl.........", "............dbd.........", "...........dbbbd........", "..........dbwwbbbbbd....",
+    "..........dbbbbbbbbbbd..", "..........dbbbbbbbbbbd..", "...........dbbbbbbbbd...", "...........db.db..db.db.",
+    "...........db.db..db.db.", "...........db.db..db.db.", "...........dd.dd..dd.dd.", "...........d..d...d..d..",
+    "...........d..d...d..d..", "...........k..k...k..k.."};
+static const char* const P_TOWARD2[22] = {
+    "........................", "........................", "...........b...b........", "............b.b.........",
+    "............bbb.........", "...........bbbbb........", "...........kblbk........", "............lll.........",
+    "............lkl.........", "............dbd.........", "...........dbbbd........", "..........dbwwbbbbbd....",
+    "..........dbbbbbbbbbbd..", "..........dbbbbbbbbbbd..", "...........dbbbbbbbbd...", "...........db.db..db.db.",
+    "...........db.db..db.db.", "...........db.db..db.db.", "...........dd.dd..dd.dd.", "...........d..d...d..d..",
+    "...........k..d...d..k..", "..............k...k....."};
 // the far stand (12 x 11); the other far poses are the mid ones at half size
 static const char* const P_FAR[11] = {
     "............", ".........b.b", ".........bb.", ".........bbk", ".......bbb..", ".bbbbbbbbb..", ".bbbbbbbbb..",
@@ -75,7 +90,8 @@ static const PoseArt MID_POSES[] = {
     {AN_STAND, P_STAND, 19, 4, 1, 11}, {AN_WALK, P_STAND, 19, 4, 1, 11}, {AN_WALK, P_WALK2, 19, 4, 1, 11},
     {AN_BOUND, P_STAND, 19, 4, 1, 11}, {AN_GRAZE, P_GRAZE, 20, 16, 1, 11}, {AN_ALERT, P_STAND, 19, 4, 1, 11},
     {AN_STOMP, P_STOMP, 19, 5, 1, 11}, {AN_STOMP, P_STAND, 19, 4, 1, 11}, {AN_SNIFF, P_SNIFF, 20, 9, 1, 11},
-    {AN_NURSE, P_STAND, 19, 4, 1, 11}, {AN_AWAY, P_AWAY, 12, 4, 11, 12}};
+    {AN_NURSE, P_STAND, 19, 4, 1, 11}, {AN_AWAY, P_AWAY, 12, 4, 11, 12},
+    {AN_TOWARD, P_TOWARD, 13, 4, 19, 12}, {AN_TOWARD, P_TOWARD2, 13, 4, 19, 12}};
 
 // ===================== storage =====================
 struct Anim { uint8_t n = 0; Spr f[AN_MAXF]; };
@@ -88,7 +104,7 @@ struct DeerSets {
 };
 static DeerSets* s_d = nullptr;
 static const uint8_t TIER_H[TIER_N] = {11, 22, 44};
-static const char* const ANIM_N[AN_N] = {"stand", "walk", "bound", "graze", "alert", "stomp", "sniff", "nurse", "away"};
+static const char* const ANIM_N[AN_N] = {"stand", "walk", "bound", "graze", "alert", "stomp", "sniff", "nurse", "away", "toward"};
 static const char* const TIER_NM[TIER_N] = {"far", "mid", "near"};
 static const char* const TAIL_NM[TAIL_N] = {"down", "flag", "flick"};
 static int s_loaded = 0;
@@ -185,7 +201,7 @@ static void derive() {
             for (int f = 0; f < B.n; f++) {
                 const Spr& b = B.f[f];
                 int r = b.k > 1 ? RAISE[t] / b.k : RAISE[t];
-                bool away = a == AN_AWAY;
+                bool away = a == AN_AWAY || a == AN_TOWARD;                   // front and rear views: V antlers, no hip/shoulder shaping
                 Spr ant = partFor(away ? s_d->antAway[t] : s_d->ant[t], b);
                 Spr doe = copySpr(b); if (!away) raise(doe, false, r);         // a doe: fuller hips
                 Spr buck = copySpr(b); if (!away) raise(buck, true, r);        // a buck: heavier shoulders, antlers

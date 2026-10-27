@@ -1,5 +1,3 @@
-// The score: minimalist ambient dub, conducted by what you're doing.
-// Walk steadily and a groove assembles itself around your footsteps; stand still and it dissolves
 // back into the drone and the forest. Time of day picks the mode; moments bring bells and choir.
 #include "audio_int.h"
 #include "audio.h"
@@ -252,7 +250,7 @@ static void conduct(const Scene& s, float dt) {
     float presence = s_tide == TIDE_REST ? 0.f : s_tide == TIDE_RISE ? clampf(s_tideT / 12.f, 0.f, 1.f)
                    : s_tide == TIDE_SONG ? 1.f : clampf(1.f - s_tideT / s_tideLen, 0.f, 1.f);
     bool song = s_tide == TIDE_SONG;
-    float duck = 1.f - 0.6f * s_awe;               // awe belongs to bells and choir
+    float duck = 1.f - 0.6f * s_awe;
 
     auto ease = [&](float& g, float target, float tau) { g += (target - g) * clampf(dt / tau, 0.f, 1.f); };
     float intro = clampf(s.t / 6.f, 0.f, 1.f);

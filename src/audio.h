@@ -1,7 +1,6 @@
 #pragma once
 #include <stdint.h>
 
-// The sound of the dream: nature, weather and a generative dub score, synthesized live at 24 kHz
 // on core 0 and streamed to the Core2 speaker. The speaker can't do bass, so the haptic motor plays
 // the low end (see haptics.*): kick, thunder, bumps and footsteps are felt, not heard.
 
@@ -16,7 +15,7 @@ void sfxFish(uint8_t kind, float arg);
 enum : uint8_t { MOMENT_INTRO, MOMENT_RAINBOW, MOMENT_MURMUR, MOMENT_AURORA, MOMENT_GOLDEN, MOMENT_TEMPLE };
 enum : uint8_t { CRIT_DEER, CRIT_RABBIT, CRIT_BIRDS, CRIT_BUTTERFLY, CRIT_DUCK, CRIT_BEAVER, CRIT_SQUIRREL, CRIT_SPLASH, CRIT_HERON };
 
-void audioSpeakerBegin();   // right after M5.begin(), before other allocations
+void audioSpeakerBegin();
 void audioBegin();
 
 // game -> audio (lock-free, safe from the main loop)

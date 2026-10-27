@@ -23,26 +23,20 @@ float fbmP(float u, float v, int period, int octaves, uint32_t salt);
 void universeInit(uint32_t seed);
 uint32_t worldSeed();
 
-// The day turns with time (about ten minutes standing still) and a little faster as you walk, so a
-// sunset unfolds while you stand and watch it. dayClock is unwrapped (its integer part counts days).
 float dayClock(float timeSec, float distance);
 inline float timeOfDayAt(float timeSec, float distance) { float c = dayClock(timeSec, distance); return c - (float)(int)c; }
 void setTimeOfDay(float tod, float timeSec, float distance);    // previews / tests
 
-// Fields shared by renderer and controls so what you see is what blocks you.
 constexpr float LAKE_T = 0.665f;          // fewer, smaller lakes
 float lakeField(float angle, float D);    // > LAKE_T is water
 // The coast: where the sea begins along this direction (a curved bay open to the west), or 1e9 if no sea that way.
 float oceanShore(float angle, float D);
-// The compass. Bearings grow to your right (clockwise from above), east = 0: south = +pi/2, west = pi, north = -pi/2.
 constexpr float AZ_EAST = 0.f, AZ_SOUTH = 1.5707963f, AZ_WEST = 3.14159265f, AZ_NORTH = -1.5707963f;
 // The sun's true height above the horizon (radians) along its arc: east at dawn, high through the south, west at dusk.
 float sunPathElevation(float tod);
-// Flooded terraces (karst): still, shallow water you can wade through, between narrow dikes.
 bool paddyAt(float angle, float D);
 float forestField(float angle, float D);  // 0 meadow .. 1 dense forest
 float cloudCover(float D);                // 0 clear .. 1 overcast
-// Streams: narrow winding shallow ribbons you can wade across. 0 = mid-channel, 1 = dry.
 float streamField(float angle, float D);
 inline bool inStream(float angle, float D) { return streamField(angle, D) < 1.f; }
 

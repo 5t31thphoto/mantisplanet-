@@ -1,7 +1,6 @@
 #pragma once
 #include <stdint.h>
 
-// Procedural fish. A species family is chosen by the water and the biome you're fishing in, then
 // shape, colour and pattern are varied by seed. Fish are drawn straight into a full-resolution
 // RGB565 overlay (0 = transparent), with light from above, hue-shifted shadows, translucent fins
 // with rays, a gill plate, an eye with a highlight, and patterns that follow the body.

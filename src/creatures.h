@@ -9,7 +9,7 @@
 //
 // Files on the card: /mp-sprites/deer/body_<anim>_<tier>.mps, antlers_<tier>.mps, antlers_away_<tier>.mps,
 //   tail_<down|flag|flick>_<tier>.mps, tail_away_<down|flag|flick>_<tier>.mps
-//   anim: stand walk bound graze alert stomp sniff nurse away      tier: far mid near
+//   anim: stand walk bound graze alert stomp sniff nurse away toward      tier: far mid near
 //   .mps: "MPS", width, height, frames (1 byte each), then per frame its anchors (signed bytes: body files
 //         head x, y, tail x, y; parts: attach x, y),
 //         then width*height*frames palette indices (0 = clear; creature colours only: 144-159, 208-223).
@@ -17,7 +17,7 @@
 namespace mantis {
 struct Spr { uint8_t w = 0, h = 0; int8_t ax = 0, ay = 0, tx = 0, ty = 0; uint8_t k = 1; uint8_t* px = nullptr; };   // a: head (antlers) / attach point; t: tail root; k: drawn at k x k
 enum : uint8_t { SEX_DOE, SEX_BUCK, SEX_FAWN, SEX_COW, SEX_N };   // COW: a caribou cow (doe hips, and antlers)
-enum : uint8_t { AN_STAND, AN_WALK, AN_BOUND, AN_GRAZE, AN_ALERT, AN_STOMP, AN_SNIFF, AN_NURSE, AN_AWAY, AN_N };   // AWAY: seen from behind
+enum : uint8_t { AN_STAND, AN_WALK, AN_BOUND, AN_GRAZE, AN_ALERT, AN_STOMP, AN_SNIFF, AN_NURSE, AN_AWAY, AN_TOWARD, AN_N };   // AWAY: seen from behind
 enum : uint8_t { TAIL_DOWN, TAIL_FLAG, TAIL_FLICK, TAIL_N };
 enum : uint8_t { TIER_FAR, TIER_MID, TIER_NEAR, TIER_N };
 constexpr uint8_t AN_MAXF = 4;

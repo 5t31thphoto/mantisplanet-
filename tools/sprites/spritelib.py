@@ -243,7 +243,7 @@ def import_art(path_or_image, asset, tier, pal, fallback_anchors=None):
     elif im.width != w * fr * n or im.height != h * n:
         im = im.crop((0, 0, w * fr * n, h * n)) if im.width >= w * fr * n and im.height >= h * n else im.resize((w * fr * n, h * n), Image.NEAREST)
     data = im.load()
-    # the markers: found, noted, removed
+    # anchor markers: record their positions, then clear them from the image
     anchors = []
     marked = set()                                         # game pixels that held a marker: refilled from their neighbours
     for f in range(fr):
@@ -333,7 +333,7 @@ def _scaled(px, w, h, f):
     return out, W, H
 
 CREAM = 213
-def deer_variant(body, frame, sex, antlers=None, tail=None, tier='mid'):
+def deer_variant(body, frame, sex, antlers=None, tail=None, tier='mid', side=True):
     """One frame of the deer as the game draws it: 'doe', 'buck', 'fawn' or 'cow'; tail = a part Sprite or None.
     Returns (pixels, w, h)."""
     w, h = body.w, body.h
@@ -341,8 +341,8 @@ def deer_variant(body, frame, sex, antlers=None, tail=None, tier='mid'):
     a = body.anchors[frame] if body.anchors and body.anchors[frame] else [w // 2, 0, 0, h // 2]
     rise = {'far': 0, 'mid': 1, 'near': 2}[tier]
     away = False
-    if sex in ('doe', 'fawn', 'cow'): _raise(px, w, h, False, rise)
-    if sex == 'buck': _raise(px, w, h, True, rise)
+    if side and sex in ('doe', 'fawn', 'cow'): _raise(px, w, h, False, rise)   # side views only, as in the game
+    if side and sex == 'buck': _raise(px, w, h, True, rise)
     if sex in ('buck', 'cow') and antlers: _stamp(px, w, h, antlers, (a[0], a[1]))
     if tail and len(a) >= 4: _stamp(px, w, h, tail, (a[2], a[3]))
     if sex == 'fawn':

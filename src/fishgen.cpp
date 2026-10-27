@@ -150,7 +150,7 @@ void fishMake(FishSpec& f, uint32_t seed, uint8_t water, uint8_t biome, uint8_t 
     if (water == WATER_CREEK || water == WATER_PADDY) f.lengthCm *= 0.85f;
     float Lm = f.lengthCm / 100.f;
     f.weightKg = F.wK * Lm * Lm * Lm * (f.depth / 0.24f) * 0.9f + 0.01f;
-    if (tier == TIER_LEGEND && f.family != F_MOONFIN) {                         // a dream-touched version
+    if (tier == TIER_LEGEND && f.family != F_MOONFIN) {
         f.shimmer = true;
         static const FCol DREAM[4][2] = {{{120, 200, 255}, {200, 140, 255}}, {{255, 150, 90}, {255, 220, 120}}, {{130, 255, 200}, {120, 160, 255}}, {{255, 140, 200}, {170, 200, 255}}};
         uint32_t d = hsh(seed ^ 0xD8u) % 4u;
@@ -331,7 +331,7 @@ void fishRender(const FishSpec& f, uint16_t* buf, int bw, int bh, int cx, int cy
                 int s = (int)fmaxf(3.f, Hmax * 0.18f);
                 if (((x + y) % s == 0) || ((x - y + 1000) % s == 0)) light -= 0.07f * f.scales;
             }
-            if (f.shimmer) {                                       // the dream fish: iridescence drifting along it
+            if (f.shimmer) {
                 float ir = sinf(u * 12.f + t * 5.f + (float)(f.seed & 255));
                 base = mixc(base, C(160 + 80 * ir, 200 - 40 * ir, 255), 0.18f);
                 if (((x * 7 + y * 13 + (int)f.seed) & 63) == 0) { px(cv, x, y, C(250, 255, 255)); continue; }

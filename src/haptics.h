@@ -13,10 +13,10 @@ void bump();                                      // walked into something solid
 void kick(float level);                           // the groove's kick, felt in the hands
 void thunder(float power, float close);           // crack (close) and a long roll
 void hooves(float dist);                          // a deer bolting
-void swell();                                     // a slow breath for a moment of awe
-void heartbeat();                                 // lub-dub (the dream begins)
+void swell();
+void heartbeat();
 void confirmMute(bool muted);                     // two soft taps = sound off, a rising tap = sound on
-void rain(float amount);                          // patter on your hands, per frame
+void rain(float amount);
 void wind(float storm, float gust);               // a faint rumble only in a storm
 void fishTick(float level);                       // a nibble at the bobber
 void fishBite();                                  // the bobber goes under

@@ -38,7 +38,6 @@ static void begin(float tod, int biome, float yawOffset = 0.f) {
   setYaw(currentYaw);
   setTimeOfDay(tod, millis() / 1000.f, totalDistance);
   fieldInit(currentYaw, totalDistance);
-  // nothing solid in your face for the shot
   FieldObj* o = const_cast<FieldObj*>(fieldObjects());
   for (int i = 0; i < FIELD_N; i++) {
     float d = sqrtf(o[i].x * o[i].x + o[i].y * o[i].y);
@@ -59,7 +58,6 @@ static void shot(const char* name) {
   printf("%-22s tod %.2f cloud %.2f rain %.2f storm %.2f fog %.2f forest %.2f lake %.2f awe %.2f groove %.2f\n",
          name, s.tod, s.cloud, s.rain, s.storm, s.fog, s.forestNear, s.lakeNear, s.awe, audioGroove());
 }
-// walk like a player: keep going, and when something stops you, look around and pick a way past
 static void walk(int frames, float tilt, float drift) {
   float stuck = 0.f, turning = 0.f;
   for (int i = 0; i < frames; i++) {

@@ -1,4 +1,3 @@
-// Nature: the bed you walk through. Everything is synthesized; nothing is sampled.
 #include "audio_int.h"
 #include "fishing.h"
 #include "audio.h"
@@ -377,7 +376,6 @@ void natureFish(uint8_t kind, float) {
     }
 }
 
-// The fight, continuous: the drag zinging as the fish takes line, a soft muffled reel ratchet as you crank.
 static dsp::SVF s_drag;
 static float s_dragG = 0.f, s_reelPh = 0.f;
 static void fishBlock(Bus& b, int n) {
@@ -509,7 +507,6 @@ static float s_birdClock = 0.f;
 struct Pending { bool on; float at; uint8_t sp; uint32_t id; };
 static Pending s_reply = {false, 0, 0, 0};
 
-// Each species has a few individuals whose motif is stable, so you hear the same bird repeat itself.
 static int makeSong(Syl* out, uint8_t sp, uint32_t id) {
     dsp::Rng r; r.s = 0x9E3779B9u ^ (id * 0x85EBCA77u) ^ (sp * 0xC2B2AE35u);
     dsp::Rng v; v.s = rng.next() | 1u;                 // per-performance variation
@@ -683,7 +680,7 @@ static void birdsBlock(Bus& bus, int n, const Scene& s) {
     birdSchedule(s, (float)n / dsp::SR);
     for (Bird& b : s_bird) {
         if (!b.on) continue;
-        float front = 0.55f + 0.45f * cosf(wrapPi(b.angle - s.yaw));      // what you face is clearer
+        float front = 0.55f + 0.45f * cosf(wrapPi(b.angle - s.yaw));
         float base = (b.sp == SP_LOON || b.sp == SP_COYOTE || b.sp == SP_ICESING ? 0.26f : b.sp == SP_HOWLER ? 0.2f : b.sp == SP_HAWK ? 0.1f : b.sp == SP_OWL || b.sp == SP_DOVE || b.sp == SP_CUCKOO ? 0.22f : b.sp == SP_CROW ? 0.12f : 0.15f) * (1.f - 0.65f * b.dist) * front;
         for (int i = 0; i < n && b.on; i++) {
             Syl& y = b.syl[b.i];
@@ -732,7 +729,7 @@ static void insectsBlock(Bus& b, int n, const Scene& s) {
     float dtb = (float)n / dsp::SR;
     float tod = s.tod;
     float nightish = bumpf(tod, 0.70f, 0.78f, 1.1f, 1.2f) + bumpf(tod, -0.2f, -0.1f, 0.14f, 0.21f);
-    float hush = s.speed > 0.05f ? 0.35f : 0.35f + 0.65f * clampf(s.stillFor / 6.f, 0.f, 1.f);   // crickets go quiet as you pass
+    float hush = s.speed > 0.05f ? 0.35f : 0.35f + 0.65f * clampf(s.stillFor / 6.f, 0.f, 1.f);
     float crT = nightish * (1.f - s.rain) * (1.f - s.storm) * hush * 0.09f;
     s_crLevel += (crT - s_crLevel) * clampf(dtb * 0.6f, 0.f, 1.f);
     float cicT = bumpf(tod, 0.42f, 0.48f, 0.62f, 0.68f) * s.open * (1.f - s.cloud * 0.8f) * (1.f - s.rain) * 0.028f;

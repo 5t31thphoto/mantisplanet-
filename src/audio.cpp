@@ -117,7 +117,6 @@ static void audioTask(void*) {
 }
 #endif
 
-// Call right after M5.begin(), before anything else allocates: the speaker driver's DMA buffers must come
 // from internal RAM. The driver runs its own task that feeds the I2S DMA. By default it shares a priority
 // with the LCD push (which keeps core 0 busy for most of each frame) and its DMA cushion is short, so it can
 // run dry: a stutter even when the frame rate is fine. Top priority and ~85 ms of DMA ride out any hiccup.

@@ -196,13 +196,12 @@ static void draw() {
             }
         }
         sprite(ov, A, frame, (int)b.x, (int)(b.y - hopOff(b)), b.flip);
-        if (baitSelected() == b.kind && ((int)(s_t * 3.f) & 1)) {      // the kind on your hook: a soft marker
+        if (baitSelected() == b.kind && ((int)(s_t * 3.f) & 1)) {
             int px = JX + ((int)b.x + A.w / 2) * SC, py = JY + ((int)(b.y - hopOff(b)) - 2) * SC;
             for (int k = -2; k <= 2; k++) if ((unsigned)(px + k) < SW && (unsigned)py < SH) ov[py * SW + px + k] = rgb565(255, 220, 110);
         }
     }
     layer(ov, JAR_FRONT_565, JAR_FRONT_a);
-    // header: the jar, and how many kinds you've found
     int found = 0; for (int k = 0; k < BAIT_KINDS; k++) if (baitFound((uint8_t)k)) found++;
     char t[48]; snprintf(t, sizeof t, "BUG JAR   KINDS FOUND %d/%d", found, BAIT_KINDS);
     uiText(ov, SW, SH, (SW - uiTextWidth(t, 1)) / 2, 6, t, rgb565(250, 226, 160), 1);
@@ -218,7 +217,7 @@ void jarOpen() {
     if (!s_bg) s_bg = (uint16_t*)memSlow(SW * SH * sizeof(uint16_t));
     if (!s_bg) return;
     uint16_t row[SW];
-    for (int y = 0; y < SH; y++) {                                      // a dimmed snapshot of where you're standing
+    for (int y = 0; y < SH; y++) {
         compositeRow(y, row);
         for (int x = 0; x < SW; x++) { uint16_t v = row[x]; int r = ((v >> 11) & 31) * 9 >> 4, g = ((v >> 5) & 63) * 9 >> 4, b = (v & 31) * 9 >> 4; uint16_t d = (uint16_t)((r << 11) | (g << 5) | b); s_bg[y * SW + x] = d ? d : 0x0821; }
     }
@@ -234,7 +233,7 @@ void jarClose() { s_on = false; overlayClear(); overlayEnable(false); sfxFish(FI
 void jarTap(int x, int y) {
     if (!s_on) return;
     if (x >= SW - 40 && y >= SH - 16) { baitSelect(-1); say("THE LURE IT IS"); hx::fishTick(0.3f); draw(); return; }
-    for (int i = s_nb - 1; i >= 0; i--) {                                 // the topmost bug under your finger
+    for (int i = s_nb - 1; i >= 0; i--) {
         const JBug& b = s_b[i]; const BugArt& A = ART[b.kind];
         int x0 = JX + (int)b.x * SC - 6, y0 = JY + (int)(b.y - hopOff(b)) * SC - 6;
         if (x >= x0 && x < x0 + A.w * SC + 12 && y >= y0 && y < y0 + A.h * SC + 12) {

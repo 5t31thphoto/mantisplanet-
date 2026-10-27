@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
       D += moved;
       journeyUpdate(D, yaw, moved);
       fieldTick(yaw, D, st * dt, dt, moved / dt, 0.f);
-      if (bumped && moved < 5.f * dt * 0.35f) {                 // like a player: pick a side once, keep turning until clear
+      if (bumped && moved < 5.f * dt * 0.35f) {
         if (bumpT <= 0.f) { bumps++; side = ((bumps * 2654435761u) >> 31) ? 1.f : -1.f; }
         bumpT = 0.5f;
       }

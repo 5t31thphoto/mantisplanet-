@@ -9,7 +9,7 @@ namespace mantis {
 enum : uint8_t { SURF_GRASS, SURF_FOREST, SURF_STONE, SURF_MUD, SURF_WET, SURF_SPLASH, SURF_SNOW, SURF_SAND, SURF_ICE };
 
 struct Scene {
-    float t, dt, tod, yaw, distance, speed;   // speed: what you actually covered (throttle units)
+    float t, dt, tod, yaw, distance, speed;
     float walkFor, stillFor;                   // seconds of steady walking / of standing still
     float sunElev, sunAz;                      // the sun's real arc: rises east (az 0), south at noon, sets west
 
@@ -20,9 +20,8 @@ struct Scene {
     float boltAz, boltAge;                     // last bolt: azimuth, seconds since
     uint32_t boltSeed;
 
-    // around you
     float forestNear, lakeNear, rockNear, open, streamNear, fallsNear;
-    float snowy, frogBoost, cuckoo, crows, japan, desert, hush, giant, oceanNear, karst, tundra, tropical;      // from the biome you're in
+    float snowy, frogBoost, cuckoo, crows, japan, desert, hush, giant, oceanNear, karst, tundra, tropical;
     uint8_t surface;
 
     // moments

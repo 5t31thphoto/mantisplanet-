@@ -4,7 +4,7 @@
 // aurora). Everything the game lights and fogs follows from these, so a whole alien planet is one file.
 // Missing keys keep Earth's colours; a file that can't be read is ignored entirely (never half-applied).
 namespace mantis {
-bool planetLoad();                         // after the card is up; true if a planet was applied
+bool planetLoad();
 #ifdef HOST
 bool planetWriteDefaults(const char* path);   // the current colours as planet.json (tools: the studio's starting point)
 #endif

@@ -15,7 +15,6 @@ void renderMuteIcon(bool muted, float alpha);
 void renderFps(int fps);
 float renderFov();                        // radians across the screen
 // The alignment drag: a diagnostic overlay (a green grid moving with the world away from a red grid left
-// where the world was), so it reads as calibration, not as a way to look around.
 void renderSetAlign(bool on, float dragSumRad);
 void renderSetFlashlight(bool on);
 // planet mods: the address of one base colour (see render.cpp); the number of time-of-day keys and each one's time

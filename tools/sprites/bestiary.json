@@ -79,6 +79,13 @@
      "note": "seen from BEHIND: running straight away (and a doe turned away showing her rump)"
     },
     {
+     "part": "body",
+     "anim": "toward",
+     "frames": 2,
+     "markers": "head",
+     "note": "front three-quarter view, walking toward the viewer (approaching). No tail."
+    },
+    {
      "part": "antlers",
      "anim": "",
      "frames": 1,

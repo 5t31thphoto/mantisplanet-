@@ -155,7 +155,7 @@ static void displayTask(void*) {
 #ifndef HOST
         M5.Display.startWrite();
         streamPacket(*s_pk, s_strip, [](int y0, uint16_t* d) {
-            M5.Display.waitDMA();                                   // the strip before last is done with this buffer's twin
+            M5.Display.waitDMA();
             M5.Display.pushImageDMA(0, y0, DW, STRIP, (const lgfx::swap565_t*)d);
         });
         M5.Display.waitDMA();

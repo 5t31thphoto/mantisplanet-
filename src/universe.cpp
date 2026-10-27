@@ -24,7 +24,6 @@ MP_HOT float vnoiseP(float u, float v, int P, uint32_t salt) {
     tv = tv * tv * (3.f - 2.f * tv);
     // The four lattice corners, as lattice() computes them, without repeating work: the wrapped column is found
     // once (one modulo, not four) and each row's inner hash is shared by its two corners. Integer-only changes:
-    // every float operation below is the same as before, in the same order.
     int x0 = iu % P; if (x0 < 0) x0 += P;
     int x1 = x0 + 1; if (x1 == P) x1 = 0;
     const uint32_t r0 = hash32((uint32_t)iv * 0x85EBCA77u ^ s_seed ^ salt);
@@ -47,7 +46,7 @@ MP_HOT float fbmP(float u, float v, int P, int oct, uint32_t salt) {
     return sum / norm;
 }
 
-static float s_dayOffset = 0.30f;      // the dream begins in early morning light
+static float s_dayOffset = 0.30f;
 float dayClock(float t, float distance) { return s_dayOffset + t * (1.f / 600.f) + distance * 0.0004f + 10.f; }
 void setTimeOfDay(float tod, float t, float distance) {
     float c = dayClock(t, distance);
@@ -65,7 +64,7 @@ float oceanShore(float a, float D) {
     const BiomeParams& b = biomeAt(D);
     if (b.ocean < 0.5f) return 1e9f;
     float dw = fabsf(a - 3.14159265f - kTau * floorf((a - 3.14159265f + 3.14159265f) / kTau));   // angle away from due west
-    if (dw > 1.25f) return 1e9f;                                       // north and south you walk along the shore
+    if (dw > 1.25f) return 1e9f;
     float wob = (fbmP(angU(a, 8), 0.f, 8, 2, 0xC0A5u) - 0.5f) * 30.f;
     return biomeStart(D) + 260.f + dw * dw * 110.f + wob;
 }
@@ -79,7 +78,7 @@ bool paddyAt(float a, float D) {
 
 float lakeField(float a, float D) {
     float sh = oceanShore(a, D);
-    if (sh < 1e8f) return D > sh ? LAKE_T + 0.3f : LAKE_T - 0.4f;     // the sea, or the dry land before it
+    if (sh < 1e8f) return D > sh ? LAKE_T + 0.3f : LAKE_T - 0.4f;
     const BiomeParams& b = biomeAt(D);
     float sc = b.pondScale > 1.f ? b.pondScale : 1.f;                   // gardens: small, frequent ponds
     int P = (int)(6.f * sc + 0.5f);

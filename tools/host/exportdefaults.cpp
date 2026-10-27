@@ -1,7 +1,8 @@
 // exportdefaults: everything Mantis Sprite Studio starts from, taken from the real game:
 //   palette.json (the 32 creature colours at noon), planet_default.json, sprites.json (today's art for every
-//   creature, size and animation: palette indices; the deer as parts, with anchors), plates/*.ppm (a noon
-//   background per biome) + plates.json. Run from tools/host:  ./exportdefaults ../sprites/defaults
+//   creature, size and animation: palette indices; the deer as parts, with anchors), scenes.bin + scenes.json
+//   (every biome at six times of day and a rainy noon, for the studio's renderer). Run from tools/host:
+//   ./exportdefaults ../sprites/defaults   (then zlib-compress scenes.bin to scenes.bin.z)
 #define main game_main_unused
 #include "harness_core.inc"
 #undef main
@@ -24,7 +25,7 @@ static void writeSprite(const char* id, const char* asset, const char* tier, int
 }
 int main(int argc, char** argv) {
   std::string dir = argc > 1 ? argv[1] : "../sprites/defaults";
-  mkdir(dir.c_str(), 0755); mkdir((dir + "/plates").c_str(), 0755);
+  mkdir(dir.c_str(), 0755);
   setup(); for (int i = 0; i < 60; i++) frame(0, 0);
   planetWriteDefaults((dir + "/planet_default.json").c_str());
   // the creature palette at noon, in a meadow
@@ -43,7 +44,7 @@ int main(int argc, char** argv) {
   g_js = fopen((dir + "/sprites.json").c_str(), "w");
   fprintf(g_js, "{\"about\": \"Today's creature art (palette indices, hex; 00 = clear), as the studio's starting point.\", \"sprites\": [\n");
   static const char* const TN[3] = {"far", "mid", "near"};
-  static const char* const AN[AN_N] = {"stand", "walk", "bound", "graze", "alert", "stomp", "sniff", "nurse", "away"};
+  static const char* const AN[AN_N] = {"stand", "walk", "bound", "graze", "alert", "stomp", "sniff", "nurse", "away", "toward"};
   for (int t = 0; t < 3; t++) {
     for (int a = 0; a < AN_N; a++) {
       int nf = 0; const Spr* f0 = deerBodyFrame((uint8_t)t, (uint8_t)a, 0, &nf);
@@ -93,20 +94,34 @@ int main(int argc, char** argv) {
     }
   }
   fprintf(g_js, "\n]}\n"); fclose(g_js);
-  // a noon plate per biome, and where the ground is at each distance
-  FILE* mf = fopen((dir + "/plates.json").c_str(), "w");
-  fprintf(mf, "{\"about\": \"Noon backgrounds (320 x 240) for previews. A creature at distance d stands at screen y = 2 * (horizon + zk / d), x = 160; game pixels are drawn 2 x 2.\", \"horizon\": 70, \"zk\": %.3f, \"plates\": [", 1.4f * PXR);
+  // Scenes for the studio's own renderer: each biome at six times of day and a rainy noon, as palette indices,
+  // with what the palette is built from (the studio rebuilds the palette itself, so planet colours apply).
+  // The game's own palette for each is included so the studio's port can be checked against it.
+  FILE* sb = fopen((dir + "/scenes.bin").c_str(), "wb");
+  FILE* sj = fopen((dir + "/scenes.json").c_str(), "w");
+  fprintf(sj, "{\"about\": \"Studio scenes: scenes.bin holds 19200 palette indices per scene (160 x 120), then the game's 768-byte palette for it.\", \"horizon\": 70, \"zk\": %.3f, \"scenes\": [\n", 1.4f * PXR);
+  const float TODS[7] = {0.27f, 0.36f, 0.49f, 0.62f, 0.72f, 0.95f, 0.49f};
+  const char* const TODN[7] = {"dawn", "morning", "noon", "afternoon", "dusk", "night", "rain"};
+  bool firstS = true;
   for (int b = 0; b < 17; b++) {
-    float Db = 70000.f + b * 7000.f; totalDistance = Db; frame(0, 0);
-    for (float d = Db - 3000.f; d < Db + 3000.f; d += 200.f) journeyForce(d, (uint8_t)b);
-    g_force = WeatherForce(); g_force.cloud = 0.3f;
-    setTimeOfDay(0.47f, millis() / 1000.f, totalDistance); frame(0, 0);
-    float yaw = g_scene.sunAz + 1.4f; setYaw(yaw); currentYaw = yaw; fieldInit(yaw, totalDistance);
-    for (int i = 0; i < 30; i++) frame(0, 0);
-    char p[512]; snprintf(p, sizeof p, "%s/plates/%s.ppm", dir.c_str(), PLANET_BIOME_IDS[b]); writePNGish(p);
-    fprintf(mf, "%s\"%s\"", b ? ", " : "", PLANET_BIOME_IDS[b]);
+    for (int k = 0; k < 7; k++) {
+      float Db = 70000.f + b * 7000.f; totalDistance = Db; frame(0, 0);
+      for (float d = Db - 3000.f; d < Db + 3000.f; d += 200.f) journeyForce(d, (uint8_t)b);
+      g_force = WeatherForce(); g_force.cloud = k == 6 ? 0.9f : 0.3f; g_force.rain = k == 6 ? 0.6f : 0.f; g_force.storm = 0.f; g_force.fog = 0.05f; g_force.aurora = 0.f;
+      setTimeOfDay(TODS[k], millis() / 1000.f, totalDistance); frame(0, 0);
+      float yaw = g_scene.sunAz + 1.4f; setYaw(yaw); currentYaw = yaw; fieldInit(yaw, totalDistance);
+      for (int i = 0; i < 30; i++) frame(0, 0);
+      fwrite(frameBuffer(), 1, 160 * 120, sb); fwrite(framePaletteRGB(), 1, 768, sb);
+      const BiomeParams& bp = biomeAt(totalDistance);
+      const Scene& sc = g_scene;
+      fprintf(sj, "%s  {\"biome\": \"%s\", \"time\": \"%s\", \"tod\": %.5f, \"cloud\": %.5f, \"rain\": %.5f, \"storm\": %.5f, \"wet\": %.5f, \"forestNear\": %.5f, \"aurora\": %.5f, "
+                  "\"flash\": %.5f, \"intro\": %.5f, \"desert\": %.5f, \"karst\": %.5f, \"tropical\": %.5f, \"japan\": %.5f, \"snow\": %.5f, \"moonlight\": %.5f}",
+              firstS ? "" : ",\n", PLANET_BIOME_IDS[b], TODN[k], sc.tod, sc.cloud, sc.rain, sc.storm, sc.wet, sc.forestNear, sc.aurora, sc.flash, sc.intro,
+              bp.desert, bp.karst, bp.tropical, bp.japan, bp.snow, bp.moonlight);
+      firstS = false;
+    }
   }
-  fprintf(mf, "]}\n"); fclose(mf);
+  fprintf(sj, "\n]}\n"); fclose(sj); fclose(sb);
   printf("defaults written to %s\n", dir.c_str());
   return 0;
 }

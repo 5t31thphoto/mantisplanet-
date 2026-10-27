@@ -1,8 +1,4 @@
 // Rules of the walk, checked against the real firmware loop:
-//   * held level, you never move (nothing walks for you)
-//   * head-on into a trunk / rock / cliff you stop dead and stay put until you turn - no autopilot
-//   * glancing off the side of one you slide past
-//   * you never end up inside anything solid, never step into a lake, nothing goes NaN
 // plus a wandering soak that reports how a blind walker fares (information only).
 #include "harness_core.inc"
 #include <algorithm>
@@ -60,7 +56,7 @@ int main(int argc, char** argv) {
   check(bumpedNow, "...and it registers as a bump");
   // turn away and walk on
   for (int f = 0; f < 30; f++) frame(0.f, 90.f);
-  for (int k = 0; k < 130; k++) {               // look for somewhere dry, like a player would
+  for (int k = 0; k < 130; k++) {
     bool wetAhead = false;
     for (int a = -3; a <= 3; a++) for (float z = 0.3f; z < 6.f; z += 0.4f) if (lakeField(currentYaw + a * 0.07f, totalDistance + z) > LAKE_T - 0.02f) wetAhead = true;
     if (!wetAhead) break;
@@ -96,7 +92,7 @@ int main(int argc, char** argv) {
     hold(25, 0);
     check(audioMuted() && !was, "long press: muted");
     clearAhead();
-    for (int k = 0; k < 40; k++) {               // face somewhere dry so there are footsteps to feel
+    for (int k = 0; k < 40; k++) {
       bool wetAhead = false;
       for (int a = -3; a <= 3; a++) for (float z = 0.3f; z < 6.f; z += 0.4f) if (lakeField(currentYaw + a * 0.07f, totalDistance + z) > LAKE_T - 0.02f) wetAhead = true;
       if (!wetAhead) break;
@@ -165,7 +161,6 @@ int main(int argc, char** argv) {
     initControls(); frame(0.f, 0.f);
   }
 
-  // 6. the journey: hold an easterly heading (steering a little as you go) and the garden comes
   {
     journeyInit(1234u + seed, 0.f);
     float D = 0.f; int seen[B_ALL_N] = {0}; int order[12]; int no = 0; uint8_t last = 255;

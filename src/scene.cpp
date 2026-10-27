@@ -34,12 +34,10 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     float clock = dayClock(t, distance);
     s.tod = clock - floorf(clock);
     s.sunElev = sunElevation(s.tod);
-    s.sunAz = AZ_EAST + (s.tod - 0.245f) * kTau;              // east at sunrise, through the south at noon, west at sunset; left to right as you face it
+    s.sunAz = AZ_EAST + (s.tod - 0.245f) * kTau;
     const BiomeParams& here = biomeAt(distance);
     s.daySeed = hash32((uint32_t)floorf(clock) ^ worldSeed());
 
-    // ---------- you ----------
-    // walking momentum survives pausing to pick a way round a tree; it fades only once you're still
     if (speed > 0.05f) { s.walkFor = fminf(s.walkFor + dt, 90.f); s.stillFor = 0.f; }
     else {
         if (!tryingToWalk) s.stillFor += dt; else s.stillFor = 0.f;
@@ -51,7 +49,7 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
     float v = clampf((fbmP(0.f, u, 1, 3, 0x7EA7u) - 0.28f) / 0.46f + here.wet, 0.f, 1.f);
     float cloudT = clampf(0.12f + v * 1.05f, 0.f, 1.f);
     if (t < 300.f) cloudT = fminf(cloudT, 0.45f + 0.55f * smoothstep(150.f, 300.f, t));
-    float settle = smoothstep(150.f, 300.f, t);             // the dream always begins in fair weather
+    float settle = smoothstep(150.f, 300.f, t);
     float rainT = smoothstep(0.62f, 0.78f, v) * settle;
     float stormT = smoothstep(0.84f, 0.97f, v) * settle;
     float windT = 0.16f + 0.34f * fbmP(0.f, u * 3.f + 5.f, 1, 2, 0x3C1Du) + rainT * 0.2f + stormT * 0.5f + here.wind;
@@ -98,7 +96,6 @@ void sceneUpdate(float t, float dt, float yaw, float distance, float speed, bool
         s.flash = e < 2.f ? f : 0.f;
     }
 
-    // ---------- around you ----------
     float fsum = 0.f, lake = 0.f;
     for (int k = -2; k <= 2; k++) fsum += forestField(yaw + k * 0.6f, distance + 2.f);
     s.forestNear = follow(s.forestNear, fsum / 5.f, dt, 1.5f);

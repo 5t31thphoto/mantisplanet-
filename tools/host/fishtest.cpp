@@ -96,7 +96,6 @@ int main() {
   for (int i = 0; i < 260; i++) frame(0, 0);
   check(!fishingActive(), "after admiring the catch, the rod is put away");
   // (fight balance per tier and play style is checked by fishsim, thousands of fights in a second)
-  // bait bugs: one turns up near you, a tap catches it, it goes on the hook, and it's used when the hook sets
   {
     int before = 0; for (int k = 0; k < BAIT_KINDS; k++) before += baitCount((uint8_t)k);
     bool seen = false;

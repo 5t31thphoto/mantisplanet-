@@ -1,4 +1,3 @@
-// Fast fight simulator: the fishing logic alone, thousands of fights per tier, three kinds of player.
 #include "../../src/fishing.h"
 #include "../../src/audio.h"
 #include "../../src/haptics.h"
@@ -22,7 +21,7 @@ static Res run(int tier, int style, int n) {
     while (fishingView().state == FS_FIGHT && t < 240.f) {
       const FishView& F = fishingView();
       float pitch = 0.f;
-      if (style == CAREFUL) {                                   // a good human: feels tension through the motor (roughly), reacts in ~0.3 s
+      if (style == CAREFUL) {
         static float noise = 0.f; static uint32_t rs = 1u;
         rs = rs * 1664525u + 1013904223u; noise += (((rs >> 8) & 1023) / 511.5f - 1.f) * 0.03f; noise *= 0.97f;
         float feel = F.tension + noise;

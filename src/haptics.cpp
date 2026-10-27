@@ -74,7 +74,7 @@ void heartbeat() { gesture(G_LUBDUB, 4, 1.f); }
 void confirmMute(bool muted) { if (muted) gesture(G_MUTE, 4, 1.f); else gesture(G_UNMUTE, 3, 1.f); }
 void rain(float amount) {
     if (amount < 0.05f) return;
-    if ((esp_random() & 1023u) < (uint32_t)(amount * 140.f)) tap((uint8_t)(55 + (esp_random() & 31u)), 9);   // drops on your hands
+    if ((esp_random() & 1023u) < (uint32_t)(amount * 140.f)) tap((uint8_t)(55 + (esp_random() & 31u)), 9);
 }
 void wind(float storm, float gust) { s_rumT = storm * gust * 0.35f; s_rumRate = 3.f + gust * 5.f; s_rumGrit = 0.6f; }
 
@@ -104,10 +104,10 @@ void update(float dt) {
         float p = 0.5f + 0.5f * sinf(s_rumPh * 6.2831853f);
         out = fmaxf(out, s_rum * (0.6f + 0.4f * p) * (1.f - s_rumGrit * 0.5f + s_rumGrit * s_rumJit));
     }
-    if (s_fishOn) {                                       // the line: a steady pull you can feel
+    if (s_fishOn) {
         float line = 0.15f + 0.55f * fminf(1.f, s_fishT);
         if (s_fishRisk > 0.3f) line = ((now / 45) & 1) ? fminf(1.f, line + 0.35f) : 0.05f;   // about to go: a rapid stutter
-        if (s_fishT < 0.12f) line = 0.f;                 // slack: nothing in your hands
+        if (s_fishT < 0.12f) line = 0.f;
         out = fmaxf(out, line);
     }
     for (Gesture& g : s_g) {

@@ -30,7 +30,7 @@ static void frame(float tilt, float turnDps, uint32_t frameUs = 33333) {
   g_us += frameUs;
   // physical: held upright (gravity along y); 'tilt' > 0 tips the top away past the walk threshold.
   // A turn about true vertical shows up on whichever gyro axes gravity lies along.
-  float th = tilt > 0.f ? (20.f + tilt * 70.f) * 0.0174533f : tilt * 60.f * 0.0174533f;   // < 0: tipped back toward you
+  float th = tilt > 0.f ? (20.f + tilt * 70.f) * 0.0174533f : tilt * 60.f * 0.0174533f;
   if (g_holdPitchDeg > -900.f) th = g_holdPitchDeg * 0.0174533f;                       // fishing tests hold an exact pitch
   M5.Imu.data.accel = {0.f, cosf(th), sinf(th)};
   M5.Imu.data.gyro = {g_flickDps, turnDps * cosf(th), turnDps * sinf(th)};

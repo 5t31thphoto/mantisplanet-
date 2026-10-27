@@ -3,9 +3,6 @@
 #include "scene.h"
 #include "fishgen.h"
 
-// Fishing. Walk up to water and tap: the rod comes up and you cast. Watch the bobber; nibbles, then a bite.
-// Flick the device toward you to set the hook. Tilt back to reel, lean forward to give line, and feel the
-// fight in your hands: tension as a rumble, the fish's kicks, a stutter when the line is about to go.
 // Turn away from the water while waiting and the rod is put away. Walking is suspended while the rod is out.
 namespace mantis {
 
@@ -28,7 +25,7 @@ struct FishView {
     float tension;        // 0..1.5
     float breakRisk;      // 0..1
     float stamina;        // 0..1 fish strength left
-    float reel, ease;     // what your hands are doing (0..1)
+    float reel, ease;
     float jump;           // >0 while the fish is in the air
     float lineSpeed;      // m/s, + = fish taking line
     uint8_t water, tier;
@@ -38,7 +35,6 @@ struct FishView {
 };
 
 bool fishingActive();                                     // the rod is out: walking is suspended
-// A short tap. Returns true if it was used (cast, or put the rod away).
 bool fishingTap(float yaw, float distance);
 void fishingUpdate(float dt, float yaw, float distance, float pitchDeg, float flickDps, const Scene& sc);
 const FishView& fishingView();
